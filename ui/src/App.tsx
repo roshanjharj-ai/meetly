@@ -118,7 +118,7 @@ export default function App() {
             <SharedContent {...{ content: content, setContent: handleContentChange }} />
           )}
           <UserList
-            users={users.map((name) => ({
+            users={users.map((name) => ({ 
               name,
               micOff: false,
               videoOff: true,
