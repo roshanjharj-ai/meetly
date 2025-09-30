@@ -9,6 +9,7 @@ import { useVAD } from "./hooks/useVAD";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { ControlActionTypes } from "./types";
 
+
 export default function App() {
   const userContext = useContext(UserContext);
   const [isJoined, setIsJoined] = useState(true);
