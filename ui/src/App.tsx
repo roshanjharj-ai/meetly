@@ -12,10 +12,10 @@ import { ControlActionTypes } from "./types";
 
 export default function App() {
   const userContext = useContext(UserContext);
-  const [isJoined, setIsJoined] = useState(true);
+  const [isJoined, setIsJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [status, setStatus] = useState("Not connected");
-  const [users, setUsers] = useState<string[]>(["Roshan", "Santosh", "Prashant", "Rajeev"]);
+  const [users, setUsers] = useState<string[]>([]);
   const [content, setContent] = useState("");
   const audioContext = useRef<AudioContext | null>(null);
   const stream = useRef<MediaStream | null>(null);
