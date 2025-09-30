@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  server:
+    build: ./server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app  # Mount for live code changes in development
+
+  ui:
+    build:
+      context: ./ui
+      args:
+        # Provide the WebSocket URL at build time for the React app
+        REACT_APP_WEBSOCKET_URL: ws://localhost:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+
+  bot:
+    build: ./bot
+    env_file:
+      - ./bot/.env  # This loads your GOOGLE_API_KEY
+    environment:
+      # These variables are used in the Dockerfile's CMD
+      ROOM_NAME: "general"
+      BOT_NAME: "GeminiBot"
+      SERVER_URL: "ws://server:8000" # Use the service name 'server' for container-to-container communication
+    depends_on:
+      - server

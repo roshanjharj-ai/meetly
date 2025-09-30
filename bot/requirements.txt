@@ -1,0 +1,15 @@
+# requirements_bot.txt
+websockets
+SpeechRecognition
+openai-whisper
+pydub
+gTTS
+google-generativeai
+python-dotenv
+
+# Core dependencies (pip will handle these)
+numpy
+requests
+soundfile
+torch
+tqdm
