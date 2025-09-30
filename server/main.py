@@ -1,8 +1,21 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 import json
 from typing import Dict, List
 
 app = FastAPI()
+
+origins = [
+    "https://lemon-moss-0c6f8a61e.1.azurestaticapps.net" 
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # A dictionary to hold room information
 rooms: Dict[str, Dict] = {}
