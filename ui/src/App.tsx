@@ -11,30 +11,29 @@ import { ControlActionTypes } from "./types";
 
 export default function App() {
   const userContext = useContext(UserContext);
+
+  // 🔹 State
   const [isJoined, setIsJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [status, setStatus] = useState("Not connected");
   const [content, setContent] = useState("");
 
+  // 🔹 Refs
   const audioContext = useRef<AudioContext | null>(null);
   const stream = useRef<MediaStream | null>(null);
 
-  // WebRTC Hook
+  // 🔹 WebRTC Hook (manages peers + remote streams)
   const { connect, disconnect, users, remoteStreams, getLocalStream } =
     useWebRTC(userContext.user.room, userContext.user.user);
 
-  // VAD Hook
+  // 🔹 VAD Hook (voice activity detection – can be extended later for signaling)
   const { init: initVAD, cleanup: cleanupVAD } = useVAD(
     isMuted,
-    (blob) => {
-      // For now we don’t send blobs directly anymore,
-      // since audio goes via WebRTC, not WebSocket.
-      // You can still use this for content signaling if needed.
-      console.debug("VAD detected speech blob:", blob);
-    },
+    () => {}, // no direct blob sending now (audio handled by WebRTC)
     (s) => setStatus(s)
   );
 
+  // 🔹 Join Room
   async function joinRoom() {
     if (!userContext.user.user || !userContext.user.room) {
       setStatus("Enter name & room");
@@ -49,7 +48,7 @@ export default function App() {
       return;
     }
 
-    await connect();
+    await connect(); // connect signaling + peers
     setIsJoined(true);
 
     if (stream.current) {
@@ -57,6 +56,7 @@ export default function App() {
     }
   }
 
+  // 🔹 Leave Room
   function leaveRoom() {
     cleanupVAD();
     stream.current?.getTracks().forEach((t) => t.stop());
@@ -66,17 +66,14 @@ export default function App() {
     setStatus("Disconnected");
   }
 
+  // 🔹 Shared content sync (TODO: use DataChannel in useWebRTC if you want)
   function handleContentChange(newContent: string) {
     setContent(newContent);
-    // TODO: If you want shared content sync over WebRTC,
-    // you should add a DataChannel in useWebRTC hook
-    // and send messages here.
+    // Example: send via DataChannel in useWebRTC
+    // sendData({ type: "content_update", content: newContent });
   }
 
-  if (!isJoined) {
-    return <StartMeeting {...{ joinRoom: joinRoom }} />;
-  }
-
+  // 🔹 Handle Controls
   const performAction = (action: string) => {
     switch (action) {
       case ControlActionTypes.end:
@@ -85,22 +82,21 @@ export default function App() {
       case ControlActionTypes.mute:
         setIsMuted((m) => !m);
         setStatus(!isMuted ? "Muted" : "Listening...");
-        // TODO: You may also want to disable local audio track
         const localStream = getLocalStream();
         localStream?.getAudioTracks().forEach((t) => (t.enabled = isMuted));
         break;
     }
   };
 
+  // 🔹 Play remote audio automatically
   useEffect(() => {
-    // Play remote streams automatically
     Object.entries(remoteStreams).forEach(([peerId, ms]) => {
       let audioEl = document.getElementById(`audio-${peerId}`) as HTMLAudioElement;
       if (!audioEl) {
         audioEl = document.createElement("audio");
         audioEl.id = `audio-${peerId}`;
         audioEl.autoplay = true;
-        (audioEl as any).playsInline = true;
+        audioEl.setAttribute("playsinline", "true"); // ✅ fixed typing issue
         document.body.appendChild(audioEl);
       }
       if (audioEl.srcObject !== ms) {
@@ -108,6 +104,11 @@ export default function App() {
       }
     });
   }, [remoteStreams]);
+
+  // 🔹 Render
+  if (!isJoined) {
+    return <StartMeeting joinRoom={joinRoom} />;
+  }
 
   return (
     <div className="d-flex flex-column min-vh-100 overflow-hidden bg-dark">
