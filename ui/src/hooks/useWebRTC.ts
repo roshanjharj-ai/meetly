@@ -39,6 +39,8 @@ export function useWebRTC(room: string, userId: string) {
       try {
         const s = await navigator.mediaDevices.getUserMedia({ audio: true });
         localStreamRef.current = s;
+        if(isInitiator)
+            console.log("Initiator");
       } catch (err) {
         console.error("Error getting local audio:", err);
         throw err;
