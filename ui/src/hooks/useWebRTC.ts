@@ -51,6 +51,7 @@ export function useWebRTC(room: string, userId: string) {
         // Create remote stream and attach tracks to it
         const remoteStream = new MediaStream();
         pc.ontrack = (ev) => {
+            console.log("📥 Remote track received from", targetId, ev.streams);
             ev.streams?.forEach((s) => {
                 // prefer the provided stream if available
                 if (s && s.getAudioTracks().length) {

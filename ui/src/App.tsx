@@ -91,11 +91,13 @@ export default function App() {
   // 🔹 Play remote audio automatically
   useEffect(() => {
     Object.entries(remoteStreams).forEach(([peerId, ms]) => {
+      console.log("🔊 Attaching remote stream for", peerId, ms);
       let audioEl = document.getElementById(`audio-${peerId}`) as HTMLAudioElement;
       if (!audioEl) {
         audioEl = document.createElement("audio");
         audioEl.id = `audio-${peerId}`;
         audioEl.autoplay = true;
+        audioEl.controls = true;   // ✅ add controls for testing
         audioEl.setAttribute("playsinline", "true"); // ✅ fixed typing issue
         document.body.appendChild(audioEl);
       }
