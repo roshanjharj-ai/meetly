@@ -1,103 +1,99 @@
-import React from 'react';
+// src/components/UserList.tsx
+import React, { useRef, useEffect } from 'react';
 import { FaMicrophoneSlash, FaVideoSlash } from 'react-icons/fa';
 import { Container, Row, Col, Card } from "react-bootstrap";
-import { motion, AnimatePresence } from "framer-motion"; // Import framer-motion
+import { motion, AnimatePresence } from "framer-motion";
 
+// User now includes their stream and full status
 interface User {
-  name: string;
-  micOff?: boolean;
-  videoOff?: boolean;
+  id: string;
+  stream?: MediaStream;
+  isMuted?: boolean;
+  isCameraOff?: boolean;
+  isLocal?: boolean;
 }
 
 interface UserListProps {
   users: User[];
-  cardBgColor?: string;
-  cardBorderColor?: string;
 }
 
-const UserList: React.FC<UserListProps> = ({
-  users,
-  cardBgColor = "bg-dark",
-  cardBorderColor = "border-secondary",
-}) => {
-  const count = users.length;
+const UserCard = ({ user }: { user: User }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Animation properties for each user card
-  const cardVariants = {
-    hidden: { opacity: 0, scale: 0.8 },
-    visible: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
-    exit: { opacity: 0, scale: 0.8, transition: { duration: 0.2 } },
-  };
-
-  const renderUserCard = (user: User) => (
-    <Card className={`text-white shadow-sm ${cardBgColor} ${cardBorderColor} h-100`}>
-      <Card.Body className="d-flex flex-column align-items-center justify-content-center position-relative">
-        <div
-          className="rounded-circle d-flex align-items-center justify-content-center"
-          style={{
-            width: "64px",
-            height: "64px",
-            backgroundColor: "rgba(255,255,255,0.2)",
-            fontSize: "1.25rem",
-          }}
-        >
-          {user.name.charAt(0).toUpperCase()}
-        </div>
-        <div className="fw-medium text-truncate w-100 text-center">{user.name}</div>
-        <div className="position-absolute top-0 end-0 d-flex gap-2 p-2">
-          {user.micOff && (
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-              <FaMicrophoneSlash className="text-danger" />
-            </motion.div>
-          )}
-          {user.videoOff && <FaVideoSlash className="text-warning" />}
-        </div>
-      </Card.Body>
-    </Card>
-  );
+  useEffect(() => {
+    if (videoRef.current && user.stream) {
+      videoRef.current.srcObject = user.stream;
+    }
+  }, [user.stream]);
 
   return (
-    <Container fluid className="vw-100 pt-4 px-3 pb-0 d-flex flex-column" style={{ height: "calc(100vh - 100px)" }}>
-      {count === 3 ? (
-        <>
-          <Row className="flex-grow-1 g-2" style={{ flex: 1 }}>
-            <Col>
-              <motion.div layout variants={cardVariants} initial="hidden" animate="visible" className="h-100">
-                {renderUserCard(users[0])}
-              </motion.div>
-            </Col>
-          </Row>
-          <Row className="flex-grow-1 g-2" style={{ flex: 1 }}>
-            <AnimatePresence>
-              {users.slice(1).map((user) => (
-                <Col key={user.name}>
-                  <motion.div layout variants={cardVariants} initial="hidden" animate="visible" exit="exit" className="h-100">
-                    {renderUserCard(user)}
-                  </motion.div>
-                </Col>
-              ))}
-            </AnimatePresence>
-          </Row>
-        </>
-      ) : (
-        <Row className="flex-grow-1 g-2" style={{ height: "100%", display: "flex", flexWrap: "wrap" }}>
-          <AnimatePresence>
-            {users.map((user) => {
-              let colSize = 12;
-              if (count === 2 || count === 4) colSize = 6;
-              else if (count === 5 || count === 6) colSize = 4;
-
-              return (
-                <Col key={user.name} xs={12} sm={colSize} className="d-flex">
-                  <motion.div layout variants={cardVariants} initial="hidden" animate="visible" exit="exit" className="flex-fill">
-                    {renderUserCard(user)}
-                  </motion.div>
-                </Col>
-              );
-            })}
-          </AnimatePresence>
-        </Row>
+    <Card className="text-white shadow-sm bg-dark border-secondary h-100 position-relative">
+      {/* Video Element */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={user.isLocal} // Mute your own video to prevent echo
+        className="w-100 h-100"
+        style={{ objectFit: 'cover', display: user.isCameraOff ? 'none' : 'block' }}
+      />
+      {/* Avatar Fallback */}
+      {user.isCameraOff && (
+        <div className="w-100 h-100 d-flex align-items-center justify-content-center">
+           <div
+              className="rounded-circle d-flex align-items-center justify-content-center"
+              style={{ width: "80px", height: "80px", backgroundColor: "rgba(255,255,255,0.1)", fontSize: "2rem" }}
+            >
+              {user.id.charAt(0).toUpperCase()}
+            </div>
+        </div>
       )}
+      {/* Name and Status Overlay */}
+      <div className="position-absolute bottom-0 start-0 p-2 d-flex align-items-center gap-2">
+        <span>{user.isLocal ? `${user.id} (You)` : user.id}</span>
+        {user.isMuted && <FaMicrophoneSlash className="text-danger" />}
+        {user.isCameraOff && <FaVideoSlash className="text-warning" />}
+      </div>
+    </Card>
+  );
+};
+
+const UserList: React.FC<UserListProps> = ({ users }) => {
+  const count = users.length;
+  
+  const cardVariants = {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.8 },
+  };
+
+  return (
+    <Container fluid className="p-3 d-flex flex-column" style={{ height: "calc(100vh - 100px)" }}>
+      <Row className="flex-grow-1 g-3">
+        <AnimatePresence>
+          {users.map((user) => {
+            let colSize = 12;
+            if (count === 2 || count === 4) colSize = 6;
+            else if (count >= 3) colSize = 4;
+            
+            return (
+              <Col key={user.id} xs={12} md={colSize} className="d-flex">
+                 <motion.div
+                    layout
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={{ duration: 0.3 }}
+                    className="w-100"
+                 >
+                   <UserCard user={user} />
+                 </motion.div>
+              </Col>
+            );
+          })}
+        </AnimatePresence>
+      </Row>
     </Container>
   );
 };
