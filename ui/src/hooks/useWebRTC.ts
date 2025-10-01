@@ -122,6 +122,9 @@ export function useWebRTC(room: string, userId: string) {
         if (pc.signalingState !== "stable") {
              await pc.setLocalDescription({ type: "rollback" } as any);
         }
+        console.log("--- Received Offer from Peer ---");
+        console.log(payload);
+        console.log("--------------------------------");
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);

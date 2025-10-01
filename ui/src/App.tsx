@@ -54,18 +54,18 @@ export default function App() {
         break;
       case ControlActionTypes.mute:
         setIsMuted((prev) => {
-            const newMutedState = !prev;
-            getLocalStream()?.getAudioTracks().forEach((t) => (t.enabled = !newMutedState));
-            broadcastStatus({ isMuted: newMutedState, isCameraOff }); // broadcast change
-            return newMutedState;
+          const newMutedState = !prev;
+          getLocalStream()?.getAudioTracks().forEach((t) => (t.enabled = !newMutedState));
+          broadcastStatus({ isMuted: newMutedState, isCameraOff }); // broadcast change
+          return newMutedState;
         });
         break;
       case ControlActionTypes.camera:
         setIsCameraOff((prev) => {
-            const newCameraOffState = !prev;
-            getLocalStream()?.getVideoTracks().forEach((t) => (t.enabled = !newCameraOffState));
-            broadcastStatus({ isMuted, isCameraOff: newCameraOffState }); // broadcast change
-            return newCameraOffState;
+          const newCameraOffState = !prev;
+          getLocalStream()?.getVideoTracks().forEach((t) => (t.enabled = !newCameraOffState));
+          broadcastStatus({ isMuted, isCameraOff: newCameraOffState }); // broadcast change
+          return newCameraOffState;
         });
         break;
       case "share":
@@ -73,27 +73,27 @@ export default function App() {
         break;
     }
   };
-  
+
   // Combine users, streams, and statuses for the UserList component
   const allUsersForGrid = useMemo(() => {
     const localUser = {
-        id: userContext.user.user,
-        stream: getLocalStream() ?? undefined,
-        isMuted: isMuted,
-        isCameraOff: isCameraOff,
-        isLocal: true,
+      id: userContext.user.user,
+      stream: getLocalStream() ?? undefined,
+      isMuted: isMuted,
+      isCameraOff: isCameraOff,
+      isLocal: true,
     };
 
     const remoteUsers = users
-        .filter(id => id !== userContext.user.user)
-        .map(id => ({
-            id: id,
-            stream: remoteStreams[id],
-            isMuted: peerStatus[id]?.isMuted ?? false,
-            isCameraOff: peerStatus[id]?.isCameraOff ?? false,
-            isLocal: false,
-        }));
-        
+      .filter(id => id !== userContext.user.user)
+      .map(id => ({
+        id: id,
+        stream: remoteStreams[id],
+        isMuted: peerStatus[id]?.isMuted ?? false,
+        isCameraOff: peerStatus[id]?.isCameraOff ?? false,
+        isLocal: false,
+      }));
+
     return [localUser, ...remoteUsers];
   }, [userContext.user.user, users, remoteStreams, peerStatus, isMuted, isCameraOff, getLocalStream]);
 
@@ -105,7 +105,7 @@ export default function App() {
   return (
     <div className="d-flex flex-column vh-100 overflow-hidden bg-dark">
       <div className="flex-grow-1 d-flex" style={{ minHeight: 0 }}>
-        {isSharing ? (
+        {isSharing &&
           <>
             <div className="w-50 p-3 d-flex flex-column">
               <textarea
@@ -120,9 +120,8 @@ export default function App() {
               />
             </div>
           </>
-        ) : (
-          <UserList users={allUsersForGrid} />
-        )}
+        }
+        <UserList users={allUsersForGrid} />
       </div>
       <Controls
         performAction={performAction}
