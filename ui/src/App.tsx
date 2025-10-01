@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useContext, useState, useEffect, useMemo } from "react";
+import { useContext, useState, useMemo } from "react";
 import "./App.css";
 import Controls from "./components/Controls";
 import StartMeeting from "./components/StartMeeting";
