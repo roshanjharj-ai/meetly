@@ -1,17 +1,20 @@
 #!/bin/bash
-set -e
+echo "🚀 Starting Jarvis bot..."
 
-echo "🚀 Starting Virtual Listener Bot..."
+# Activate virtual environment if present
+if [ -d "antenv" ]; then
+    source antenv/bin/activate
+elif [ -d "venv" ]; then
+    source venv/bin/activate
+fi
 
-# Navigate to your app directory (adjust if needed)
-cd ai
+# Move into app directory (adjust if your code is under /ai or /app)
+cd /home/site/wwwroot/ai || cd /home/site/wwwroot || exit 1
 
-# Print current directory for debugging
-pwd
+# Run your bot with full arguments
+python main.py \
+  --room myroom \
+  --name Jarvis \
+  --server wss://meetly-server-bkhgbua4gwf4hrcb.canadacentral-01.azurewebsites.net/ws
 
-# Optional: show Python version and list files
-python --version
-ls -l
-
-# Run your bot
-python main.py --room "aiRoom" --name "Jocker" --server "wss://meetly-server-bkhgbua4gwf4hrcb.canadacentral-01.azurewebsites.net/ws"
+echo "✅ Bot started and connected to WebSocket"
