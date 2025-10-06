@@ -1,20 +1,22 @@
 #!/bin/bash
-echo "🚀 Starting Jarvis bot..."
+echo "🚀 Starting Virtual Listener bot..."
 
-# Activate virtual environment if present
-if [ -d "antenv" ]; then
-    source antenv/bin/activate
-elif [ -d "venv" ]; then
-    source venv/bin/activate
+cd /home/site/wwwroot/ai
+
+# Ensure Python virtual environment is activated if Oryx created one
+if [ -d "/antenv" ]; then
+  echo "Activating Azure virtual environment..."
+  source /antenv/bin/activate
 fi
 
-# Move into app directory (adjust if your code is under /ai or /app)
-cd /home/site/wwwroot/ai || cd /home/site/wwwroot || exit 1
+echo "Installing dependencies..."
+pip install --upgrade pip
+pip install -r requirements.txt
 
-# Run your bot with full arguments
-python main.py \
-  --room myroom \
-  --name Jarvis \
-  --server wss://meetly-server-bkhgbua4gwf4hrcb.canadacentral-01.azurewebsites.net/ws
+# Set the WebSocket URL here
+WS_SERVER="wss://YOUR_WEBSOCKET_SERVER_URL/ws"
+ROOM="myroom"
+BOT_NAME="Jarvis"
 
-echo "✅ Bot started and connected to WebSocket"
+echo "Connecting to server: $WS_SERVER"
+python3 main.py --room "$ROOM" --name "$BOT_NAME" --server "$WS_SERVER"
