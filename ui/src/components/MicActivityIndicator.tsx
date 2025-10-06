@@ -1,7 +1,6 @@
 // src/components/MicActivityIndicator.tsx
 
 import { motion } from "framer-motion";
-import { Button } from "react-bootstrap";
 import { IoMic, IoMicOff } from "react-icons/io5";
 
 interface Props {
