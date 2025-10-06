@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# rooms: room_id -> { user_id: {"name": str, "ws": WebSocket } }
+# rooms: room_id -> { user_id: {"ws": WebSocket } }
 rooms: Dict[str, Dict[str, Dict]] = {}
 
 @app.get("/")
@@ -30,6 +30,8 @@ async def health_check():
 @app.websocket("/ws/{room_id}/{user_id}")
 async def signaling(websocket: WebSocket, room_id: str, user_id: str):
     await websocket.accept()
+    print(f"[server] New WS connection: room={room_id} user={user_id}")
+
     # add user to room
     if room_id not in rooms:
         rooms[room_id] = {}
@@ -38,57 +40,54 @@ async def signaling(websocket: WebSocket, room_id: str, user_id: str):
     # notify existing users about the newcomer
     user_list = list(rooms[room_id].keys())
     join_msg = {"type": "user_list", "users": user_list}
-    # send updated user list to all users
-    for uid, info in list(rooms[room_id].items()):
-        try:
-            await info["ws"].send_text(json.dumps(join_msg))
-        except Exception:
-            # stale ws; remove it
-            try:
-                await info["ws"].close()
-            except:
-                pass
-            del rooms[room_id][uid]
+    await broadcast(room_id, join_msg)
 
     try:
         while True:
             data = await websocket.receive_text()
-            # Expect a JSON object for signaling
-            # { type: "signal", action: "offer"/"answer"/"ice", from: user_id, to: target_id, payload: {...} }
             try:
                 msg = json.loads(data)
             except json.JSONDecodeError:
+                print("[server] Received non-JSON message")
                 continue
 
-            if msg.get("type") != "signal":
-                continue
+            msg_type = msg.get("type")
+            print(f"[server] Received from {user_id}: type={msg_type} keys={list(msg.keys())}")
 
-            target = msg.get("to")
-            if not target:
-                continue
+            # forwarding signaling messages
+            if msg_type == "signal":
+                # keep exact payload
+                target = msg.get("to")
+                if not target:
+                    await safe_send(websocket, {"type": "error", "message": "missing 'to' in signal"})
+                    continue
+                if room_id in rooms and target in rooms[room_id]:
+                    print(f"[server] Forwarding signal from {user_id} to {target} (action={msg.get('action')})")
+                    await safe_send(rooms[room_id][target]["ws"], msg)
+                else:
+                    print(f"[server] Target {target} not present in room {room_id}")
+                    await safe_send(websocket, {
+                        "type": "error",
+                        "message": f"target {target} not found in room"
+                    })
 
-            # forward to the target if present
-            if room_id in rooms and target in rooms[room_id]:
-                target_ws = rooms[room_id][target]["ws"]
-                try:
-                    await target_ws.send_text(json.dumps(msg))
-                except Exception:
-                    # remove stale and notify
-                    try:
-                        await target_ws.close()
-                    except:
-                        pass
-                    del rooms[room_id][target]
+            # bot_audio / bot_text broadcast
+            elif msg_type in ("bot_audio", "bot_text"):
+                print(f"[server] Broadcasting {msg_type} from {user_id} to room {room_id}")
+                # broadcast to all in the room except sender
+                for uid, info in list(rooms[room_id].items()):
+                    if uid == user_id:
+                        continue
+                    await safe_send(info["ws"], msg)
+
+            # user_list / other messages: ignore or broadcast as needed
             else:
-                # target not found -> optionally notify sender
-                err = {"type": "error", "message": f"target {target} not found in room"}
-                try:
-                    await websocket.send_text(json.dumps(err))
-                except:
-                    pass
+                # Unknown types: ignore but you can add handling here
+                print(f"[server] Ignoring unknown message type: {msg_type}")
+                continue
 
     except WebSocketDisconnect:
-        pass
+        print(f"[server] WebSocketDisconnect: {user_id}")
     finally:
         # cleanup on disconnect
         if room_id in rooms and user_id in rooms[room_id]:
@@ -101,16 +100,28 @@ async def signaling(websocket: WebSocket, room_id: str, user_id: str):
         if room_id in rooms:
             user_list = list(rooms[room_id].keys())
             update_msg = {"type": "user_list", "users": user_list}
-            for uid, info in list(rooms[room_id].items()):
-                try:
-                    await info["ws"].send_text(json.dumps(update_msg))
-                except Exception:
-                    try:
-                        await info["ws"].close()
-                    except:
-                        pass
-                    del rooms[room_id][uid]
+            await broadcast(room_id, update_msg)
 
         # delete room if empty
         if room_id in rooms and not rooms[room_id]:
             del rooms[room_id]
+
+# -------------------------------------------------------------------
+# Helper functions
+# -------------------------------------------------------------------
+async def safe_send(ws: WebSocket, msg: dict):
+    try:
+        await ws.send_text(json.dumps(msg))
+    except Exception as e:
+        print(f"[server] safe_send error: {e}")
+        try:
+            await ws.close()
+        except:
+            pass
+
+async def broadcast(room_id: str, msg: dict):
+    """Send message to all clients in a room"""
+    if room_id not in rooms:
+        return
+    for uid, info in list(rooms[room_id].items()):
+        await safe_send(info["ws"], msg)

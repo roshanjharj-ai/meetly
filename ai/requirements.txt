@@ -1,0 +1,8 @@
+aiortc
+av
+webrtcvad
+pydub
+gtts
+speechrecognition
+websockets
+numpy

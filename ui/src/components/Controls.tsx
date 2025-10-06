@@ -3,6 +3,7 @@ import React from 'react';
 import { Button, ButtonGroup, Container } from "react-bootstrap";
 import { FiMic, FiMicOff, FiVideo, FiVideoOff, FiPhoneOff, FiShare2 } from "react-icons/fi";
 import { ControlActionTypes } from '../types';
+import MicActivityIndicator from './MicActivityIndicator';
 
 interface ControlsProps {
     performAction: (action: string) => void;
@@ -11,9 +12,10 @@ interface ControlsProps {
     isMuted: boolean;
     isCameraOff: boolean;
     isSharing: boolean;
+    isSpeaking: boolean
 }
 
-const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMuted, isCameraOff, isSharing }) => {
+const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMuted, isCameraOff, isSharing, isSpeaking }) => {
     return (
         <Container fluid className="bg-dark p-3 d-flex flex-row align-items-center justify-content-between gap-3 border-top border-secondary">
             {/* Status Display */}
@@ -54,7 +56,8 @@ const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMute
                 >
                     <FiShare2 size={20} />
                 </Button>
-                
+                <MicActivityIndicator speaking={isSpeaking} />
+
                 {/* End Call Button */}
                 <Button
                     variant="danger"

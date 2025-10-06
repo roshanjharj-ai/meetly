@@ -17,28 +17,28 @@ const StartMeeting = ({ joinRoom }: request) => {
         userContext.setUser({ ...userNRoom });
     }, [userNRoom])
     return (
-        <div>
-            <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                <div className="join-container space-y-4 p-6 rounded shadow bg-white dark:bg-gray-800">
+        <div className="d-flex mx-auto rounded shadow bg-white dark:bg-gray-800 p-6" style={{ height: "250px", width: "500px", marginTop: "10%" }}>
+            <div className="w-100 d-flex flex-column align-items-center justify-content-between gap-2 p-6">
+                <div className="d-flex flex-column align-items-center gap-4 p-6 h-100 mt-5" style={{ width: "400px" }}>
                     <input
                         placeholder="Your name"
                         value={userNRoom.user}
                         onChange={(e) => setUserNRoom((p) => ({ ...p, user: e.target.value }))}
-                        className="w-full p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
+                        className="w-100 p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
                     />
                     <input
                         placeholder="Room"
                         value={userNRoom.room}
                         onChange={(e) => setUserNRoom((p) => ({ ...p, room: e.target.value }))}
-                        className="w-full p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
+                        className="w-100 p-2 border rounded bg-white dark:bg-gray-700 dark:border-gray-600"
                     />
-                    <button
-                        onClick={() => { joinRoom() }}
-                        className="w-full py-2 rounded bg-blue-500 hover:bg-blue-600 text-white font-medium"
-                    >
-                        Join Room
-                    </button>
                 </div>
+                <button
+                    onClick={() => { joinRoom() }}
+                    className="w-full py-2 rounded btn btn-primary mb-4"
+                >
+                    Join Room
+                </button>
             </div>
         </div>
     )

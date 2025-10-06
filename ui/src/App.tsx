@@ -21,6 +21,7 @@ export default function App() {
 
   // --- WebRTC Hook ---
   const {
+    speaking,
     connect,
     disconnect,
     users,
@@ -130,6 +131,7 @@ export default function App() {
         isMuted={isMuted}
         isCameraOff={isCameraOff}
         isSharing={isSharing}
+        isSpeaking={speaking}
       />
     </div>
   );
