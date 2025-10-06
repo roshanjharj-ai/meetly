@@ -1,8 +1,17 @@
 #!/bin/bash
-apt-get update && apt-get install -y ffmpeg
-export PYTHONPATH=/home/site/wwwroot/ai:/home/site/wwwroot
+set -e
 
-echo "🚀 Starting Jarvis bot..."
-python3 web/main.py &  # <-- your bot
-# Dummy HTTP server so Azure thinks something is running
-python3 -m http.server 8000
+echo "🚀 Starting Virtual Listener Bot..."
+
+# Navigate to your app directory (adjust if needed)
+cd ai
+
+# Print current directory for debugging
+pwd
+
+# Optional: show Python version and list files
+python --version
+ls -l
+
+# Run your bot
+python main.py --room "aiRoom" --name "Jocker" --server "wss://meetly-server-bkhgbua4gwf4hrcb.canadacentral-01.azurewebsites.net/ws"
