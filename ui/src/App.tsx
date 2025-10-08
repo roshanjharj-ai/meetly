@@ -1,15 +1,15 @@
-import React, { useContext, useState, useMemo, useEffect } from "react";
+import DOMPurify from 'dompurify';
+import { motion } from "framer-motion";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { FaCircle, FaCompressAlt, FaExpandAlt, FaMoon, FaSun, FaThLarge } from "react-icons/fa";
 import "./App.css";
 import Controls from "./components/Controls";
 import StartMeeting from "./components/StartMeeting";
 import UserList from "./components/UserList";
 import { UserContext } from "./context/UserContext";
 import { useWebRTC } from "./hooks/useWebRTC";
-import { ControlActionTypes } from "./types";
-import { motion } from "framer-motion";
-import { FaThLarge, FaCircle, FaSun, FaMoon, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
 import { ColorSchemes } from "./theme";
-import DOMPurify from 'dompurify';
+import { ControlActionTypes } from "./types";
 
 export default function App() {
   const userContext = useContext(UserContext);
