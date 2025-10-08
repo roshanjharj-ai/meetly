@@ -253,7 +253,6 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
         } else if (msg.type === "signal") {
           await handleSignal(msg);
         } else if (msg.type === "bot_audio") {
-          // --- FIX: Added this block to handle audio from the bot ---
           playBase64Audio(msg.data || "", msg.format);
           setBotSpeaker(msg.speaker || ""); // ? new: track speaker name
         }

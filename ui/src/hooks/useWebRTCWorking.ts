@@ -13,7 +13,6 @@ type SignalMsg = {
   message?: string;
   format?: string;
   data?: string;
-  speaker?: string; // ? added field
 };
 
 type DataChannelMessage =
@@ -41,7 +40,6 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
   const [speaking, setSpeaking] = useState<boolean>(false);
   const [sharedContent, setSharedContent] = useState<string>("");
   const [peerStatus, setPeerStatus] = useState<Record<string, PeerStatus>>({});
-  const [botSpeaker, setBotSpeaker] = useState<string>(""); // ? new
 
   // Mic analyser internals
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -115,6 +113,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
   const ensureLocalStream = useCallback(async () => {
     if (!localStreamRef.current) {
       try {
+        // Request video and audio to support camera controls
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         localStreamRef.current = stream;
         startMicAnalyser(stream);
@@ -255,7 +254,6 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
         } else if (msg.type === "bot_audio") {
           // --- FIX: Added this block to handle audio from the bot ---
           playBase64Audio(msg.data || "", msg.format);
-          setBotSpeaker(msg.speaker || ""); // ? new: track speaker name
         }
       } catch (err) {
         _log("WS message parse error:", err);
@@ -282,7 +280,6 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
     setRemoteStreams({});
     setPeerStatus({});
     setSharedContent("");
-    setBotSpeaker(""); // ? reset
   }, [_log]);
 
   useEffect(() => () => disconnect(), [disconnect]);
@@ -299,6 +296,5 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
     sendContentUpdate,
     peerStatus,
     broadcastStatus,
-    botSpeaker, // ? new export
   };
 }

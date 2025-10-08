@@ -1,0 +1,249 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen;
+  overflow: hidden;
+}
+
+[data-theme="dark"] {
+  --primary: #00bfff;
+  --accent: #00ff99;
+  --muted: #6c757d;
+  --background: #0b1116;
+  --surface: #111821;
+  --text: #eaeaea;
+  --border: #1f2a33;
+}
+
+[data-theme="light"] {
+  --primary: #007bff;
+  --accent: #00a36c;
+  --muted: #6c757d;
+  --background: #f9fafb;
+  --surface: #ffffff;
+  --text: #0b1320;
+  --border: #d0d7de;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text);
+}
+
+.btn-outline-info {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-outline-info:hover {
+  background-color: var(--primary);
+  color: #fff;
+}
+
+/* Sleek scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+
+
+/*Bot CSS */
+
+/* === BOT TASK UI THEME === */
+.bot-task-container {
+  font-family: "Inter", sans-serif;
+  background: #f9fafb;
+  color: #1f2937;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.bot-task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.bot-task-header h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.bot-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bot-task-item {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 14px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.bot-task-item:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+.bot-task-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bot-task-title {
+  font-weight: 600;
+  color: #111827;
+}
+
+.bot-task-owner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bot-task-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bot-task-owner-name {
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.bot-task-status {
+  font-size: 0.85rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* Status Colors */
+.bot-task-status.complete { background: #dcfce7; color: #166534; }
+.bot-task-status.inprogress { background: #fef9c3; color: #854d0e; }
+.bot-task-status.todo { background: #e0f2fe; color: #075985; }
+.bot-task-status.stuck { background: #fee2e2; color: #991b1b; }
+
+/* Overdue or stuck rows */
+.bot-task-item.overdue, .bot-task-item.stuck {
+  border-left: 4px solid #dc2626;
+  background: #fef2f2;
+}
+
+/* === Task Details === */
+.bot-task-details {
+  margin-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 10px;
+  font-size: 0.9rem;
+}
+
+.bot-task-description {
+  margin: 6px 0;
+  color: #4b5563;
+}
+
+.bot-task-comments {
+  margin-top: 10px;
+  border-top: 1px dashed #d1d5db;
+  padding-top: 10px;
+}
+
+.bot-task-comment {
+  padding: 8px 10px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+.bot-task-comment.bot {
+  background: #dbeafe;
+  border-left: 3px solid #3b82f6;
+}
+
+.bot-task-comment-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.bot-task-comment-text {
+  margin-top: 4px;
+  color: #374151;
+}
+
+.bot-task-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.bot-task-info-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.bot-task-info-label {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+.bot-task-info-value {
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.bot-task-effort {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.bot-task-effort span {
+  background: #e5e7eb;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.bot-task-effort.overshoot span.completed {
+  background: #fee2e2;
+  color: #991b1b;
+  font-weight: 600;
+}

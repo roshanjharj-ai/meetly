@@ -9,7 +9,6 @@ import { ControlActionTypes } from "./types";
 import { motion } from "framer-motion";
 import { FaThLarge, FaCircle, FaSun, FaMoon, FaExpandAlt, FaCompressAlt } from "react-icons/fa";
 import { ColorSchemes } from "./theme";
-import DOMPurify from 'dompurify';
 
 export default function App() {
   const userContext = useContext(UserContext);
@@ -113,31 +112,24 @@ export default function App() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 onClick={() => setFullscreenShare((f) => !f)}
-                className="btn position-absolute top-0 end-0 m-3 rounded-pill z-3"
+                className="btn btn-outline-info position-absolute top-0 end-0 m-3 rounded-pill px-3 py-2 z-3"
               >
                 {fullscreenShare ? (
                   <>
-                    <FaCompressAlt />
+                    <FaCompressAlt /> Minimize
                   </>
                 ) : (
                   <>
-                    <FaExpandAlt />
+                    <FaExpandAlt /> Fullscreen
                   </>
                 )}
               </motion.button>
-              <div className="d-flex flex-column h-100 p-3">
-                <div
-                  className="bg-light rounded h-100 p-3 text-dark overflow-auto"
-                  dangerouslySetInnerHTML={{
-                    __html: DOMPurify.sanitize(sharedContent || "<p>No shared content</p>"),
-                  }}
-                />
-                <textarea
-                  className="form-control bg-secondary text-white flex-grow-1 mx-0 my-3 rounded-4"
-                  style={{ resize: "none" }}
-                  onChange={(e) => sendContentUpdate(e.target.value)}
-                />
-              </div>
+
+              <textarea
+                className="form-control bg-secondary text-white flex-grow-1 m-3 rounded-4"
+                style={{ resize: "none" }}
+                onChange={(e) => sendContentUpdate(e.target.value)}
+              />
             </div>
 
             {!fullscreenShare && (
