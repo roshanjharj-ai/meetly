@@ -1,7 +1,8 @@
 // src/components/MicActivityIndicator.tsx
 
 import { motion } from "framer-motion";
-import { IoMic, IoMicOff } from "react-icons/io5";
+import { FaMicrophoneLines } from "react-icons/fa6";
+import { GrMicrophone } from "react-icons/gr";
 
 interface Props {
   speaking: boolean;
@@ -9,11 +10,12 @@ interface Props {
 
 export default function MicActivityIndicator({ speaking }: Props) {
   return (
-    <motion.button
-      className="rounded-circle d-flex align-items-center justify-content-center p-3"
+    <motion.div
+      className="d-flex align-items-center justify-content-center p-3"
       animate={{
         scale: speaking ? [1, 1.2, 1] : 1,
-        backgroundColor: speaking ? "#ef4444" : "#9ca3af",
+        color: speaking ? "#ef4444" : "#9ca3af",
+        background: "transparent"
       }}
       transition={{
         duration: 0.6,
@@ -21,10 +23,10 @@ export default function MicActivityIndicator({ speaking }: Props) {
       }}
     >
       {speaking ? (
-        <IoMic className="text-white w-8 h-8" />
+        <FaMicrophoneLines size={20} />
       ) : (
-        <IoMicOff className="text-white w-8 h-8" />
+        <GrMicrophone size={20} />
       )}
-    </motion.button>
+    </motion.div>
   );
 }

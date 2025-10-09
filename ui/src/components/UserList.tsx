@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaMicrophoneSlash, FaVideoSlash, FaRobot } from "react-icons/fa";
 import { BotNames } from "../Constants";
@@ -168,6 +168,23 @@ const BotBox = () => (
 const UserList: React.FC<UserListProps> = ({ users, view }) => {
   if (!users?.length) return null;
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
+
+  useEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        // 👇 Switch to vertical when width < 650px (tweakable)
+        setIsMobileLayout(width < 650);
+      }
+    });
+
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+
   const botUsers = users.filter((u) =>
     BotNames.some((b) => b.toLowerCase() === u.id.toLowerCase())
   );
@@ -196,9 +213,8 @@ const UserList: React.FC<UserListProps> = ({ users, view }) => {
               width: 96,
               height: 96,
               background: colorForUser(i),
-              border: `2px solid ${
-                u.speaking ? "var(--accent)" : "var(--border)"
-              }`,
+              border: `2px solid ${u.speaking ? "var(--accent)" : "var(--border)"
+                }`,
               fontWeight: 600,
               fontSize: 28,
             }}
@@ -225,20 +241,19 @@ const UserList: React.FC<UserListProps> = ({ users, view }) => {
 
   return (
     <div
-      className="w-100 h-100 p-3"
+      ref={containerRef}
+      className="w-100 h-100 p-3 participant-grid overflow-auto"
       style={{
-        display: "grid",
-        gridTemplateColumns: `repeat(${gridConfig.cols}, 1fr)`,
+        display: isMobileLayout ? "flex" : "grid",
+        flexDirection: isMobileLayout ? "column" : undefined,
         alignItems: "center",
-        justifyItems: "center",
+        justifyContent: isMobileLayout ? "center" : undefined,
+        gridTemplateColumns: isMobileLayout ? undefined : "repeat(auto-fit, minmax(200px, 1fr))",
         gap: "1rem",
-        background: "var(--surface)",
-        borderRadius: 12,
-        overflow: "hidden",
       }}
     >
       <AnimatePresence>
-        {realUsers.map((u, i) => (
+        {realUsers.map((u: any, i: number) => (
           <motion.div
             key={u.id}
             layout
@@ -247,23 +262,17 @@ const UserList: React.FC<UserListProps> = ({ users, view }) => {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25 }}
             style={{
-              width: singleView ? "90%" : "100%",
-              height: singleView ? "90%" : "100%",
-              maxHeight: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              width: isMobileLayout ? "100%" : "auto",
+              aspectRatio: isMobileLayout ? "1 / 1" : undefined,
+              maxWidth: isMobileLayout ? "400px" : "auto",
             }}
+            className="participant-card-wrapper"
           >
-            <UserCard
-              user={u}
-              color={colorForUser(i)}
-              singleView={singleView}
-            />
+            <UserCard user={u} color={colorForUser(i)} singleView={singleView} />
           </motion.div>
         ))}
       </AnimatePresence>
-      {botUsers.length > 0 && <BotBox />}
+      {botUsers?.length > 0 && <BotBox />}
     </div>
   );
 };

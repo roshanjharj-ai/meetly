@@ -20,9 +20,10 @@ const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMute
         <Container fluid className="bg-dark p-3 d-flex flex-row align-items-center justify-content-between gap-3 border-top border-secondary">
             {/* Status Display */}
             <div className="d-flex justify-content-center" style={{ minWidth: '150px' }}>
-                <div className="px-3 py-2 border border-secondary rounded-pill text-white small text-truncate">
+                <div className="px-3 py-2 border border-secondary rounded-pill text-white small text-truncate align-items-center d-flex">
                     {status}
                 </div>
+                <MicActivityIndicator speaking={isSpeaking} />
             </div>
 
             {/* Control Buttons */}
@@ -56,7 +57,6 @@ const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMute
                 >
                     <FiShare2 size={20} />
                 </Button>
-                <MicActivityIndicator speaking={isSpeaking} />
 
                 {/* End Call Button */}
                 <Button

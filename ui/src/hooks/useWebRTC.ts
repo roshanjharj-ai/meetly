@@ -82,7 +82,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
   // --- Local Media & Mic Analysis ---
   const startMicAnalyser = useCallback((stream: MediaStream) => {
     try {
-      if (audioCtxRef.current) audioCtxRef.current.close().catch(() => {});
+      if (audioCtxRef.current) audioCtxRef.current.close().catch(() => { });
       const ctx = new AudioContext();
       audioCtxRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
@@ -96,7 +96,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
       const step = () => {
         analyser.getByteTimeDomainData(dataArray);
         const rms = Math.sqrt(dataArray.reduce((sum, val) => sum + ((val - 128) / 128) ** 2, 0) / dataArray.length);
-        
+
         if (rms > threshold && !isSpeaking) {
           isSpeaking = true;
           setSpeaking(true);
@@ -141,7 +141,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
       _log("DC message parse error:", err);
     }
   };
-  
+
   // --- Peer Connection Management ---
   const createPeer = useCallback(async (targetId: string, isInitiator: boolean) => {
     if (peersRef.current[targetId]) return peersRef.current[targetId];
@@ -191,7 +191,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
       await pc.setLocalDescription(offer);
       wsRef.current?.send(JSON.stringify({ type: "signal", action: "offer", from: userId, to: targetId, payload: pc.localDescription }));
     }
-    
+
     peersRef.current[targetId] = pc;
     return pc;
   }, [ensureLocalStream, userId, _log]);
@@ -213,7 +213,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
       if (payload) await pc.addIceCandidate(payload);
     }
   }, [createPeer, userId]);
-  
+
   // --- Data Channel Communication ---
   const broadcastOverDataChannels = (message: DataChannelMessage) => {
     const msgString = JSON.stringify(message);
@@ -264,7 +264,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
     wsRef.current = ws;
   }, [buildWsUrl, ensureLocalStream, createPeer, handleSignal, userId, BOT_NAME, _log, playBase64Audio]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback((callBck: any) => {
     _log("Disconnecting...");
     wsRef.current?.close();
     Object.values(peersRef.current).forEach(pc => pc.close());
@@ -272,7 +272,7 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
     }
     if (micRAFRef.current) cancelAnimationFrame(micRAFRef.current);
-    if (audioCtxRef.current) audioCtxRef.current.close().catch(()=>{});
+    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => { });
 
     // Reset all state
     localStreamRef.current = null;
@@ -283,10 +283,11 @@ export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
     setPeerStatus({});
     setSharedContent("");
     setBotSpeaker(""); // ? reset
+    callBck();
   }, [_log]);
 
-  useEffect(() => () => disconnect(), [disconnect]);
-  
+  useEffect(() => () => disconnect(() => { }), [disconnect]);
+
   // --- Final Return Value ---
   return {
     speaking,

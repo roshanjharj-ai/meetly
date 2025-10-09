@@ -1,21 +1,18 @@
-import { useContext, useEffect, useState } from 'react'
-import { UserContext } from '../context/UserContext'
+import { useState } from 'react'
 import type { UserAndRoom } from '../types'
+import { useNavigate } from 'react-router-dom'
 
-interface request {
-    joinRoom: () => void
-}
-
-const StartMeeting = ({ joinRoom }: request) => {
+const StartMeeting = () => {
     const [userNRoom, setUserNRoom] = useState<UserAndRoom>({
         room: "",
         user: ""
     })
-    const userContext = useContext(UserContext);
 
-    useEffect(() => {
-        userContext.setUser({ ...userNRoom });
-    }, [userNRoom])
+    const navigate = useNavigate();
+
+    const joinRoom = () => {
+        navigate("meet?room=" + userNRoom.room + "&user=" + userNRoom.user);
+    }
     return (
         <div className="d-flex mx-auto rounded shadow bg-white dark:bg-gray-800 p-6" style={{ height: "250px", width: "500px", marginTop: "10%" }}>
             <div className="w-100 d-flex flex-column align-items-center justify-content-between gap-2 p-6">
