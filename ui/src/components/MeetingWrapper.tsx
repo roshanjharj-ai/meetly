@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/UserContext';
 import MeetingHome from './MeetingHome';

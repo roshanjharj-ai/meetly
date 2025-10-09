@@ -2,14 +2,13 @@ import DOMPurify from 'dompurify';
 import { motion } from "framer-motion";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { FaCircle, FaCompressAlt, FaExpandAlt, FaMoon, FaSun, FaThLarge } from "react-icons/fa";
-import Controls from "./Controls";
-import StartMeeting from "./StartMeeting";
-import UserList from "./UserList";
+import { useNavigate } from 'react-router-dom';
 import { UserContext } from "../context/UserContext";
 import { useWebRTC } from "../hooks/useWebRTC";
 import { ColorSchemes } from "../theme";
 import { ControlActionTypes } from "../types";
-import { useNavigate } from 'react-router-dom';
+import Controls from "./Controls";
+import UserList from "./UserList";
 
 export default function MeetingHome() {
     const userContext = useContext(UserContext);
@@ -216,6 +215,7 @@ export default function MeetingHome() {
                 <Controls
                     performAction={performAction}
                     status={status}
+                    isJoined={isJoined}
                     room={userContext.user.room}
                     isMuted={isMuted}
                     isCameraOff={isCameraOff}

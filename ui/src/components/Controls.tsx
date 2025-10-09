@@ -12,16 +12,18 @@ interface ControlsProps {
     isMuted: boolean;
     isCameraOff: boolean;
     isSharing: boolean;
-    isSpeaking: boolean
+    isSpeaking: boolean,
+    isJoined: boolean
 }
 
-const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMuted, isCameraOff, isSharing, isSpeaking }) => {
+const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMuted, isCameraOff, isSharing, isSpeaking, isJoined }) => {
     return (
         <Container fluid className="bg-dark p-3 d-flex flex-row align-items-center justify-content-between gap-3 border-top border-secondary">
             {/* Status Display */}
             <div className="d-flex justify-content-center" style={{ minWidth: '150px' }}>
                 <div className="px-3 py-2 border border-secondary rounded-pill text-white small text-truncate align-items-center d-flex">
                     {status}
+                    {isJoined ? "Joined" : ""}
                 </div>
                 <MicActivityIndicator speaking={isSpeaking} />
             </div>

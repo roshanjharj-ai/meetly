@@ -227,16 +227,6 @@ const UserList: React.FC<UserListProps> = ({ users, view }) => {
     );
   }
 
-  // Grid view configuration
-  const gridConfig = (() => {
-    if (total <= 1) return { cols: 1, rows: 1 };
-    if (total === 2) return { cols: 2, rows: 1 };
-    if (total <= 4) return { cols: 2, rows: 2 };
-    if (total <= 6) return { cols: 3, rows: Math.ceil(total / 3) };
-    const cols = Math.ceil(Math.sqrt(total));
-    return { cols, rows: Math.ceil(total / cols) };
-  })();
-
   const singleView = total === 1;
 
   return (
