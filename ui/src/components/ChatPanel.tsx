@@ -62,7 +62,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     <div
       className={`chat-panel h-100 ${className}`}
       style={{
-        width: 380,
         maxWidth: "38vw",
         zIndex: 1800,
       }}

@@ -1,17 +1,16 @@
-import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
-import { BsEarbuds } from "react-icons/bs";
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-    FiDisc,
     FiMic,
     FiMicOff,
-    FiPhoneOff,
-    FiShare,
     FiVideo,
     FiVideoOff,
+    FiPhoneOff,
+    FiShare,
 } from "react-icons/fi";
 import { LuPanelRight, LuPanelRightClose } from "react-icons/lu";
 import { PiTelevisionSimpleBold } from "react-icons/pi";
+import { BsEarbuds } from "react-icons/bs";
 import { ControlActionTypes } from "../types"; // Ensure this path is correct
 
 interface ControlsProps {
@@ -24,7 +23,6 @@ interface ControlsProps {
     isSpeaking: boolean;
     isJoined: boolean;
     isSidebar: boolean;
-    isRecording: boolean;
 }
 
 const Controls = ({
@@ -37,7 +35,6 @@ const Controls = ({
     isSpeaking,
     isJoined,
     isSidebar,
-    isRecording, // New prop
 }: ControlsProps) => {
     const [isShareMenuOpen, setShareMenuOpen] = useState(false);
 
@@ -211,15 +208,6 @@ const Controls = ({
                             className={`control-button ${isCameraOff ? 'active-toggle' : ''}`}
                         >
                             {isCameraOff ? <FiVideoOff size={20} /> : <FiVideo size={20} />}
-                        </motion.button>
-                        <motion.button
-                            onClick={() => performAction("record")}
-                            aria-label={isRecording ? "Stop recording" : "Start recording"}
-                            className={`control-button ${isRecording ? 'hang-up' : ''}`} // Re-use hang-up style for red color
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                        >
-                            <FiDisc size={20} />
                         </motion.button>
                         <div className="position-relative d-flex align-items-center">
                             <motion.button

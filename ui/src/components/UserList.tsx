@@ -78,12 +78,12 @@ const UserCard: React.FC<{ user: User; color: string; singleView?: boolean }> = 
         boxShadow: user.speaking ? "0 0 18px rgba(0,255,140,0.45)" : "0 0 8px rgba(0,0,0,0.2)",
       }}
       transition={{ type: "spring", stiffness: 220, damping: 22 }}
-      className="d-flex flex-column position-relative rounded-3"
+      className="d-flex flex-column position-relative rounded-3 "
       style={{
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        border: `2px solid ${user.speaking ? "rgba(16,185,129,0.8)" : "transparent"}`,
+        border: `2px solid ${user.speaking ? "rgba(16,185,129,0.8)" : "rgba(255,255,255,0.4)"}`,
         background: "var(--surface)",
       }}
     >

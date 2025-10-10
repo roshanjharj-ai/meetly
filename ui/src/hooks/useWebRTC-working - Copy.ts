@@ -55,8 +55,6 @@ type SignalMsg = {
   format?: string;
   speaker?: string;
   message?: string;
-    is_recording?: boolean;
-  speakers?: Record<string, boolean>;
 };
 
 type DataChannelMessage =
@@ -99,8 +97,7 @@ class WebRTCManager {
   onBotMessage?: (m: ChatMessagePayload) => void;
   onBotActive?: (active: boolean) => void;
   onUsersCount?: (n: number) => void;
- onRecordingUpdate?: (is_recording: boolean) => void;
-  onSpeakerUpdate?: (speakers: Record<string, boolean>) => void;
+
   iceConfig: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
   constructor(room: string, userId: string, baseSignalingUrl?: string) {
@@ -180,7 +177,7 @@ class WebRTCManager {
       try {
         console.log("onmessage:" + evt.data);
         const msg: SignalMsg = JSON.parse(evt.data);
-        this.log("📨 WS message:", msg.type, msg.from, "→", msg.to);
+        this.log("📨 WS message:", msg.type, msg.action, msg.from, "→", msg.to);
         await this.onWsMessage(msg);
       } catch (err) {
         this.log("WS parse error", err);
@@ -213,18 +210,6 @@ class WebRTCManager {
 
   async onWsMessage(msg: SignalMsg) {
     if (!msg) return;
-    
-    // --- NEW: Handle recording updates ---
-    if (msg.type === "recording_update") {
-      this.onRecordingUpdate?.(!!msg.is_recording);
-      return;
-    }
-    
-    // --- NEW: Handle speaker updates ---
-    if (msg.type === "speaker_update") {
-      this.onSpeakerUpdate?.(msg.speakers || {});
-      return;
-    }
 
     // --- 1️⃣ Handle user list updates ---
     if (msg.type === "user_list") {
@@ -536,10 +521,6 @@ class WebRTCManager {
     });
   }
 
- // --- NEW MANAGER METHODS ---
-  sendSpeakingUpdate(speaking: boolean) {
-    this.wsSend({ type: "speaking_update", payload: { speaking } });
-  }
   sendContentUpdate(content: string) {
     this.broadcastDataChannel({ type: "content_update", payload: content });
   }
@@ -616,13 +597,6 @@ class WebRTCManager {
       this.log("startScreenShare failed", err);
     }
   }
-  
-   startRecording() {
-    this.wsSend({ type: "start_recording" });
-  }
-  stopRecording() {
-    this.wsSend({ type: "stop_recording" });
-  }
 
   stopScreenShare() {
     try {
@@ -664,8 +638,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const [botSpeaker, setBotSpeaker] = useState<string>("");
   const [sharedContent, setSharedContent] = useState<string>("");
   const [speaking, setSpeaking] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [speakers, setSpeakers] = useState<Record<string, boolean>>({}); 
 
   // create manager once
   useEffect(() => {
@@ -679,8 +651,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       else delete n[peerId];
       return n;
     });
-    mgr.onRecordingUpdate = (r) => setIsRecording(r);
-    mgr.onSpeakerUpdate = (s) => setSpeakers(s);
     mgr.onRemoteScreen = (peerId, stream) => setRemoteScreens((prev) => {
       const n = { ...prev };
       if (stream) n[peerId] = stream;
@@ -826,11 +796,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       audioCtx?.close();
     };
   }, [localStream]);
-  
-   // --- NEW EFFECT: Report local speaking status to server on change ---
-  useEffect(() => {
-    mgrRef.current?.sendSpeakingUpdate(speaking);
-  }, [speaking]);
 
   const disconnect = useCallback((cb?: any) => {
     mgrRef.current?.disconnect();
@@ -841,16 +806,10 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     await mgrRef.current?.startScreenShare(audioMode);
     setIsScreenSharing(true);
   }, []);
-// --- NEW CALLBACKS ---
-  const startRecording = useCallback(() => {
-    mgrRef.current?.startRecording();
-  }, []);
+
   const stopScreenShare = useCallback(() => {
     mgrRef.current?.stopScreenShare();
     setIsScreenSharing(false);
-  }, []);
-  const stopRecording = useCallback(() => {
-    mgrRef.current?.stopRecording();
   }, []);
 
   const sendContentUpdate = useCallback((content: string) => {
@@ -892,10 +851,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     botActive,
     botSpeaker,
     sharedContent,
-    speaking,
-    startRecording,
-    stopRecording,
-    isRecording,
-    speakers,
+    speaking
   };
 }

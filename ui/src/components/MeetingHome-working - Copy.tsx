@@ -55,12 +55,7 @@ export default function MeetingHome() {
         // botSpeaker,
         peerStatus,
         sharedContent,
-        speaking, // Local speaking status
-        // --- NEW from hook ---
-        isRecording,
-        startRecording,
-        stopRecording,
-        speakers, // All speakers
+        speaking
     } = useWebRTC(userContext.user.room, userContext.user.user);
 
     // set CSS theme variables
@@ -134,11 +129,6 @@ export default function MeetingHome() {
             case "chat":
                 setChatOpen((s) => !s);
                 break;
-            // --- NEW ACTION ---
-            case "record":
-                if (isRecording) stopRecording();
-                else startRecording();
-                break;
             case "share-none": startScreenShare("none"); break;
             case "share-mic": startScreenShare("mic"); break;
             case "share-system": startScreenShare("system"); break;
@@ -153,22 +143,18 @@ export default function MeetingHome() {
             isMuted,
             isCameraOff,
             isLocal: true,
-            speaking: speakers[userContext.user.user] ?? false,
+            speaking: false,
         };
-        const remotes = users
-            .filter((u) => u !== userContext.user.user)
-            .map((id) => ({
-                id,
-                stream: remoteStreams[id],
-                // --- BUG FIX: Use peerStatus for correct remote status ---
-                isMuted: peerStatus[id]?.isMuted ?? false,
-                isCameraOff: peerStatus[id]?.isCameraOff ?? false,
-                isLocal: false,
-                // --- NEW: Use speakers object for remote users ---
-                speaking: speakers[id] ?? false,
-            }));
+        const remotes = users.filter((u) => u !== userContext.user.user).map((id) => ({
+            id,
+            stream: remoteStreams[id],
+            isMuted: false,
+            isCameraOff: false,
+            isLocal: false,
+            speaking: false,
+        }));
         return [local, ...remotes];
-    }, [userContext.user.user, users, remoteStreams, getLocalStream, isMuted, isCameraOff, speakers, peerStatus]);
+    }, [userContext.user.user, users, remoteStreams, getLocalStream, isMuted, isCameraOff]);
 
     // active share
     const shareRef = useRef<HTMLVideoElement | null>(null);
@@ -272,7 +258,7 @@ export default function MeetingHome() {
 
             {/* Controls */}
             <div style={{ borderTop: "1px solid rgba(255,255,255,0.03)" }}>
-                <Controls isSidebar={isSidebar} performAction={(a: string) => performAction(a)} status={isJoined ? "Connected" : "Not connected"} room={userContext.user.room} isMuted={isMuted} isCameraOff={isCameraOff} isSharing={isScreenSharing} isSpeaking={speaking} isJoined={isJoined} isRecording={isRecording} />
+                <Controls isSidebar={isSidebar} performAction={(a: string) => performAction(a)} status={isJoined ? "Connected" : "Not connected"} room={userContext.user.room} isMuted={isMuted} isCameraOff={isCameraOff} isSharing={isScreenSharing} isSpeaking={speaking} isJoined={isJoined} />
             </div>
 
             {

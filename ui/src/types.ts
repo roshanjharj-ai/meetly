@@ -15,5 +15,6 @@ export const ControlActionTypes = {
     share: "share",
     raiseHand: "raiseHand",
     camera: "camera",
-    sidebar: "sidebar"
+    sidebar: "sidebar",
+    shareStop: "share-none"
 }
