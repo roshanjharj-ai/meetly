@@ -63,7 +63,8 @@ type DataChannelMessage =
   | { type: "screen_update"; payload: { sharing: boolean; by: string } }
   | { type: "chat_message"; payload: ChatMessagePayload };
 
-const DEFAULT_WS = "ws://127.0.0.1:8000";
+const socketUrl = import.meta.env.VITE_WEBSOCKET_URL;
+const DEFAULT_WS = socketUrl;// "ws://127.0.0.1:8000";
 
 /** Optional bot names - if you have a global constant, set window.__BOT_NAMES__ = [...] before load */
 const DEFAULT_BOT_NAMES = (window as any).__BOT_NAMES__ || ["Jarvis"];
