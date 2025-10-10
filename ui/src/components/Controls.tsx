@@ -35,7 +35,6 @@ const Controls = ({
     isCameraOff,
     isSharing,
     isSpeaking,
-    isJoined,
     isSidebar,
     isRecording, // New prop
 }: ControlsProps) => {

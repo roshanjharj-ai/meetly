@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import { FaMicrophone } from "react-icons/fa6"; // Using one icon for a smoother transition
 
 interface Props {
