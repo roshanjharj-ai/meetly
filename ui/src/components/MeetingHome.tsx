@@ -52,7 +52,7 @@ export default function MeetingHome() {
         chatMessages,
         sendChatMessage,
         // botActive,
-        // botSpeaker,
+        botSpeaker,
         peerStatus,
         sharedContent,
         speaking, // Local speaking status
@@ -251,6 +251,7 @@ export default function MeetingHome() {
                             activeSidebarTab == "perticipants" ?
                                 <div style={{ overflowY: "auto", flex: 1 }}>
                                     <UserList
+                                        botSpeaker={botSpeaker}
                                         users={users.map((id) => ({
                                             id,
                                             stream: remoteStreams[id],

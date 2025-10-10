@@ -91,7 +91,7 @@ export default function UserGrid({ users, excludeUserId = null, className = "", 
                 {u.isCameraOff && <FaVideoSlash className="text-warning" />}
                 {u.speaking && (
                   <motion.div animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 1.1 }} style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(16,185,129,0.9)", padding: "4px 8px", borderRadius: 20, color: "#fff", fontWeight: 700 }}>
-                    <FaMicrophone size={12} /> Speaking
+                    <FaMicrophone size={12} />
                   </motion.div>
                 )}
               </div>

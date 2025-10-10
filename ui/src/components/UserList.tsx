@@ -15,6 +15,7 @@ interface User {
 
 interface UserListProps {
   users: User[];
+  botSpeaker: string,
   view: "grid" | "circle";
   // optionally exclude a user (e.g. active sharer) from grid thumbnails
   excludeUserId?: string | null;
@@ -27,7 +28,11 @@ const COLORS = [
   "#9c755f", "#bab0ab",
 ];
 
-const BotBox = () => (
+interface BotBoxProps {
+  botSpeaking: boolean;
+}
+
+const BotBox: React.FC<BotBoxProps> = ({ botSpeaking }) => (
   <motion.div
     drag
     dragMomentum={false}
@@ -45,7 +50,17 @@ const BotBox = () => (
     <div className="d-flex align-items-center gap-3">
       <FaRobot className="text-info" size={20} />
       <div>
-        <strong>Bot Active</strong>
+        <strong>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            Bot Active
+            {!botSpeaking && <FaMicrophoneSlash className="text-danger" />}
+            {botSpeaking && (
+              <motion.div animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 1.1 }} style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(16,185,129,0.9)", padding: "4px 8px", borderRadius: 20, color: "#fff", fontWeight: 700 }}>
+                <FaMicrophone size={12} />
+              </motion.div>
+            )}
+          </div>
+        </strong>
         <div className="text-secondary small">AI Assistant Running</div>
       </div>
     </div>
@@ -60,7 +75,7 @@ const UserCard: React.FC<{ user: User; color: string; singleView?: boolean }> = 
       try {
         videoRef.current.srcObject = user.stream;
         const p = videoRef.current.play();
-        if (p && p.catch) p.catch(() => {});
+        if (p && p.catch) p.catch(() => { });
       } catch (e) {
         console.warn("attach stream failed", e);
       }
@@ -96,7 +111,7 @@ const UserCard: React.FC<{ user: User; color: string; singleView?: boolean }> = 
 
         {user.speaking && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", background: "rgba(16,185,129,0.9)", color: "#fff", padding: "6px 10px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
-            <FaMicrophone /> Speaking
+            <FaMicrophone />
           </motion.div>
         )}
       </div>
@@ -112,7 +127,7 @@ const UserCard: React.FC<{ user: User; color: string; singleView?: boolean }> = 
   );
 };
 
-const UserList: React.FC<UserListProps> = ({ users, excludeUserId = null }) => {
+const UserList: React.FC<UserListProps> = ({ users, excludeUserId = null, botSpeaker }) => {
   const [isMobile, setIsMobile] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -128,8 +143,8 @@ const UserList: React.FC<UserListProps> = ({ users, excludeUserId = null }) => {
 
   if (!users || users.length === 0) return null;
 
-  const realUsers = users.filter((u) => !BotNames.map(b=>b.toLowerCase()).includes(u.id.toLowerCase()));
-  const botUsers = users.filter((u) => BotNames.map(b=>b.toLowerCase()).includes(u.id.toLowerCase()));
+  const realUsers = users.filter((u) => !BotNames.map(b => b.toLowerCase()).includes(u.id.toLowerCase()));
+  const botUsers = users.filter((u) => BotNames.map(b => b.toLowerCase()).includes(u.id.toLowerCase()));
 
   // exclude the active sharer from grid thumbnails
   const shownUsers = excludeUserId ? realUsers.filter(u => u.id !== excludeUserId) : realUsers;
@@ -147,8 +162,7 @@ const UserList: React.FC<UserListProps> = ({ users, excludeUserId = null }) => {
           ))}
         </AnimatePresence>
       </div>
-
-      {botUsers.length > 0 && <BotBox />}
+      {botUsers.length > 0 && <BotBox botSpeaking={(botSpeaker != "")} />}
     </div>
   );
 };

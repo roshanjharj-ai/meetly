@@ -55,7 +55,7 @@ type SignalMsg = {
   format?: string;
   speaker?: string;
   message?: string;
-    is_recording?: boolean;
+  is_recording?: boolean;
   speakers?: Record<string, boolean>;
 };
 
@@ -99,7 +99,7 @@ class WebRTCManager {
   onBotMessage?: (m: ChatMessagePayload) => void;
   onBotActive?: (active: boolean) => void;
   onUsersCount?: (n: number) => void;
- onRecordingUpdate?: (is_recording: boolean) => void;
+  onRecordingUpdate?: (is_recording: boolean) => void;
   onSpeakerUpdate?: (speakers: Record<string, boolean>) => void;
   iceConfig: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
@@ -213,13 +213,13 @@ class WebRTCManager {
 
   async onWsMessage(msg: SignalMsg) {
     if (!msg) return;
-    
+
     // --- NEW: Handle recording updates ---
     if (msg.type === "recording_update") {
       this.onRecordingUpdate?.(!!msg.is_recording);
       return;
     }
-    
+
     // --- NEW: Handle speaker updates ---
     if (msg.type === "speaker_update") {
       this.onSpeakerUpdate?.(msg.speakers || {});
@@ -536,7 +536,7 @@ class WebRTCManager {
     });
   }
 
- // --- NEW MANAGER METHODS ---
+  // --- NEW MANAGER METHODS ---
   sendSpeakingUpdate(speaking: boolean) {
     this.wsSend({ type: "speaking_update", payload: { speaking } });
   }
@@ -616,8 +616,8 @@ class WebRTCManager {
       this.log("startScreenShare failed", err);
     }
   }
-  
-   startRecording() {
+
+  startRecording() {
     this.wsSend({ type: "start_recording" });
   }
   stopRecording() {
@@ -665,7 +665,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const [sharedContent, setSharedContent] = useState<string>("");
   const [speaking, setSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [speakers, setSpeakers] = useState<Record<string, boolean>>({}); 
+  const [speakers, setSpeakers] = useState<Record<string, boolean>>({});
 
   // create manager once
   useEffect(() => {
@@ -694,7 +694,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     };
     mgr.onBotAudio = (data, fmt, speaker) => {
       try {
-        console.log("Playing bot audio...");
+        setBotSpeaker(speaker || "");
+        console.log("Playing bot audio...:" + speaker);
         const binary = atob(data || "");
         const u8 = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) u8[i] = binary.charCodeAt(i);
@@ -734,11 +735,13 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
           URL.revokeObjectURL(url);
         };
 
-        setBotSpeaker(speaker || "");
         setBotActive(true);
       } catch (err) {
         console.error("bot audio play failed", err);
       }
+      setTimeout(() => {
+        setBotSpeaker("");
+      }, 5000);
     };
     mgr.onBotMessage = (m) => {
       setChatMessages((prev) => [...prev, m]);
@@ -826,8 +829,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       audioCtx?.close();
     };
   }, [localStream]);
-  
-   // --- NEW EFFECT: Report local speaking status to server on change ---
+
+  // --- NEW EFFECT: Report local speaking status to server on change ---
   useEffect(() => {
     mgrRef.current?.sendSpeakingUpdate(speaking);
   }, [speaking]);
@@ -841,7 +844,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     await mgrRef.current?.startScreenShare(audioMode);
     setIsScreenSharing(true);
   }, []);
-// --- NEW CALLBACKS ---
+  // --- NEW CALLBACKS ---
   const startRecording = useCallback(() => {
     mgrRef.current?.startRecording();
   }, []);
