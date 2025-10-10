@@ -1,4 +1,6 @@
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -7,23 +9,38 @@ html, body, #root {
 }
 
 [data-theme="dark"] {
-  --primary: #00bfff;
-  --accent: #00ff99;
-  --muted: #6c757d;
-  --background: #0b1116;
-  --surface: #111821;
-  --text: #eaeaea;
+  --primary: #46b3ff;
+  --accent: #00ffaa;
+  --muted: #6c7a89;
+  --background: #0b0f14;
+  --surface: #121921;
+  --text: #e5ecf3;
   --border: #1f2a33;
 }
 
 [data-theme="light"] {
-  --primary: #007bff;
-  --accent: #00a36c;
+  --primary: #0078d7;
+  --accent: #00997a;
   --muted: #6c757d;
-  --background: #f9fafb;
+  --background: #f8f9fb;
   --surface: #ffffff;
   --text: #0b1320;
   --border: #d0d7de;
+}
+
+[data-theme="dark"] .nav-tabs .nav-link.active {
+  text-shadow: 0 0 8px var(--primary);
+}
+
+[data-theme="dark"] .nav-tabs .nav-link:hover {
+  text-shadow: 0 0 6px var(--accent);
+}
+
+[data-theme="light"] .nav-tabs .nav-link.active {
+  background: linear-gradient(135deg,
+      rgba(0, 123, 255, 0.1),
+      rgba(0, 163, 108, 0.08));
+  box-shadow: inset 0 0 6px rgba(0, 123, 255, 0.1);
 }
 
 body {
@@ -66,7 +83,7 @@ body {
   color: #1f2937;
   padding: 16px;
   border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   max-width: 800px;
   margin: 0 auto;
 }
@@ -100,7 +117,7 @@ body {
 }
 
 .bot-task-item:hover {
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
 
@@ -148,13 +165,29 @@ body {
 }
 
 /* Status Colors */
-.bot-task-status.complete { background: #dcfce7; color: #166534; }
-.bot-task-status.inprogress { background: #fef9c3; color: #854d0e; }
-.bot-task-status.todo { background: #e0f2fe; color: #075985; }
-.bot-task-status.stuck { background: #fee2e2; color: #991b1b; }
+.bot-task-status.complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.bot-task-status.inprogress {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.bot-task-status.todo {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.bot-task-status.stuck {
+  background: #fee2e2;
+  color: #991b1b;
+}
 
 /* Overdue or stuck rows */
-.bot-task-item.overdue, .bot-task-item.stuck {
+.bot-task-item.overdue,
+.bot-task-item.stuck {
   border-left: 4px solid #dc2626;
   background: #fef2f2;
 }
@@ -246,4 +279,106 @@ body {
   background: #fee2e2;
   color: #991b1b;
   font-weight: 600;
+}
+
+.user-grid>div {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.user-grid video {
+  display: block;
+}
+
+.chat-panel {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+@keyframes aurora {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(120deg, #00ffaa33, #0078d733, #a855f733);
+  background-size: 200% 200%;
+  animation: aurora 15s ease infinite;
+  z-index: -1;
+}
+
+/* === Elegant Animated Tabs === */
+/* === Aurora Tabs (Balanced for Light + Dark) === */
+.nav-tabs {
+  display: flex;
+  border: none;
+  background: var(--surface);
+  padding: 6px 8px;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  gap: 6px;
+}
+
+/* Base Tab */
+.nav-tabs .nav-link {
+  position: relative;
+  flex: 1;
+  text-align: center;
+  font-weight: 500;
+  font-size: 0.95rem;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  transition: all 0.3s ease;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+/* Hover - soft illumination */
+.nav-tabs .nav-link:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.03);
+  transform: translateY(-1px);
+}
+
+/* Active - subtle gradient and inner glow */
+.nav-tabs .nav-link.active {
+  color: var(--text);
+  background: linear-gradient(135deg,
+      rgba(70, 179, 255, 0.12),
+      rgba(0, 255, 170, 0.1));
+  font-weight: 600;
+}
+
+/* Underline animation */
+.nav-tabs .nav-link::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 2px;
+  transform: translateX(-50%);
+  transition: width 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+.nav-tabs .nav-link.active::after {
+  width: 40%;
+  opacity: 1;
 }

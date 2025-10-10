@@ -1,7 +1,8 @@
+// UserList.tsx
 import React, { useRef, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaMicrophoneSlash, FaVideoSlash, FaRobot } from "react-icons/fa";
-import { BotNames } from "../Constants";
+import { FaMicrophoneSlash, FaVideoSlash, FaRobot, FaMicrophone } from "react-icons/fa";
+import { BotNames } from "../Constants"; // keep as in your project
 
 interface User {
   id: string;
@@ -15,31 +16,54 @@ interface User {
 interface UserListProps {
   users: User[];
   view: "grid" | "circle";
+  // optionally exclude a user (e.g. active sharer) from grid thumbnails
+  excludeUserId?: string | null;
 }
 
+/** color palette you used previously — unchanged */
 const COLORS = [
   "#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
   "#59a14f", "#edc949", "#af7aa1", "#ff9da7",
   "#9c755f", "#bab0ab",
 ];
 
-// ─────────────────────────────
-// Single user or grid card
-// ─────────────────────────────
-const UserCard = ({
-  user,
-  color,
-  singleView = false,
-}: {
-  user: User;
-  color: string;
-  singleView?: boolean;
-}) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
+const BotBox = () => (
+  <motion.div
+    drag
+    dragMomentum={false}
+    whileHover={{ scale: 1.03 }}
+    className="position-fixed bg-dark text-white px-4 py-3 rounded-4 shadow"
+    style={{
+      bottom: 24,
+      right: 24,
+      border: "1px solid var(--primary)",
+      boxShadow: "0 0 12px rgba(0,191,255,0.4)",
+      zIndex: 1200,
+      cursor: "grab",
+    }}
+  >
+    <div className="d-flex align-items-center gap-3">
+      <FaRobot className="text-info" size={20} />
+      <div>
+        <strong>Bot Active</strong>
+        <div className="text-secondary small">AI Assistant Running</div>
+      </div>
+    </div>
+  </motion.div>
+);
+
+const UserCard: React.FC<{ user: User; color: string; singleView?: boolean }> = ({ user, color, singleView }) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     if (videoRef.current && user.stream) {
-      videoRef.current.srcObject = user.stream;
+      try {
+        videoRef.current.srcObject = user.stream;
+        const p = videoRef.current.play();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {
+        console.warn("attach stream failed", e);
+      }
     }
   }, [user.stream]);
 
@@ -49,81 +73,37 @@ const UserCard = ({
     <motion.div
       layout
       whileHover={{ scale: 1.01 }}
-      className="shadow-sm d-flex flex-column position-relative"
+      animate={{
+        scale: user.speaking ? 1.03 : 1,
+        boxShadow: user.speaking ? "0 0 18px rgba(0,255,140,0.45)" : "0 0 8px rgba(0,0,0,0.2)",
+      }}
+      transition={{ type: "spring", stiffness: 220, damping: 22 }}
+      className="d-flex flex-column position-relative rounded-3"
       style={{
         width: "100%",
         height: "100%",
-        borderRadius: "14px",
-        border: `2px solid ${user.speaking ? "var(--accent)" : "var(--border)"}`,
-        background: "var(--surface)",
         overflow: "hidden",
-        justifyContent: "flex-start",
+        border: `2px solid ${user.speaking ? "rgba(16,185,129,0.8)" : "transparent"}`,
+        background: "var(--surface)",
       }}
     >
-      {/* Video / Placeholder */}
-      <div
-        className="flex-grow-1 d-flex align-items-center justify-content-center position-relative"
-        style={{
-          width: "100%",
-          height: singleView ? "calc(100% - 44px)" : "100%",
-          overflow: "hidden",
-          background: showPlaceholder ? color : "#000",
-          display: "flex",
-        }}
-      >
+      <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", background: showPlaceholder ? color : "#000" }}>
         {showPlaceholder ? (
-          <div
-            className="d-flex align-items-center justify-content-center w-100 h-100"
-            style={{
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: singleView ? 120 : 48,
-              textShadow: "0 0 8px rgba(0,0,0,0.6)",
-            }}
-          >
-            {user.id.charAt(0).toUpperCase()}
-          </div>
+          <div style={{ color: "#fff", fontSize: singleView ? 96 : 40, fontWeight: 700 }}>{user.id.charAt(0).toUpperCase()}</div>
         ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={user.isLocal}
-            style={{
-              width: "100%",
-              height: "100%",
-              maxWidth: "100%",
-              maxHeight: singleView ? "calc(100vh - 200px)" : "100%",
-              objectFit: singleView ? "contain" : "cover",
-              borderRadius: "14px",
-              display: "block",
-              background: "#000",
-            }}
-          />
+          <video ref={videoRef} autoPlay playsInline muted={user.isLocal} style={{ width: "100%", height: "100%", objectFit: singleView ? "contain" : "cover" }} />
+        )}
+
+        {user.speaking && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", background: "rgba(16,185,129,0.9)", color: "#fff", padding: "6px 10px", borderRadius: 20, display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}>
+            <FaMicrophone /> Speaking
+          </motion.div>
         )}
       </div>
 
-      {/* Footer with name & icons */}
-      <div
-        className="w-100 d-flex align-items-center justify-content-between px-3"
-        style={{
-          height: 44,
-          background:
-            "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%)",
-          color: "#fff",
-          fontWeight: 600,
-          fontSize: 14,
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          borderBottomLeftRadius: "14px",
-          borderBottomRightRadius: "14px",
-        }}
-      >
-        <div className="text-truncate" style={{ maxWidth: "75%" }}>
-          {user.isLocal ? `${user.id} (You)` : user.id}
-        </div>
-        <div className="d-flex align-items-center gap-2">
+      <div style={{ height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", background: "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.25))", color: "#fff" }}>
+        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "70%" }}>{user.isLocal ? `${user.id} (You)` : user.id}</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {user.isMuted && <FaMicrophoneSlash className="text-danger" />}
           {user.isCameraOff && <FaVideoSlash className="text-warning" />}
         </div>
@@ -132,137 +112,43 @@ const UserCard = ({
   );
 };
 
-// ─────────────────────────────
-// Movable Bot box
-// ─────────────────────────────
-const BotBox = () => (
-  <motion.div
-    drag
-    dragMomentum={false}
-    whileHover={{ scale: 1.05 }}
-    className="position-fixed bg-dark text-white px-4 py-3 rounded-4 shadow"
-    style={{
-      bottom: 24,
-      right: 24,
-      border: "1px solid var(--primary)",
-      boxShadow: "0 0 12px rgba(0,191,255,0.4)",
-      zIndex: 1000,
-      cursor: "grab",
-    }}
-  >
-    <div className="d-flex align-items-center gap-3">
-      <FaRobot className="text-info" size={22} />
-      <div>
-        <strong>Bot Active</strong>
-        <div className="text-secondary" style={{ fontSize: 13 }}>
-          AI Assistant Running
-        </div>
-      </div>
-    </div>
-  </motion.div>
-);
-
-// ─────────────────────────────
-// User list grid/circle
-// ─────────────────────────────
-const UserList: React.FC<UserListProps> = ({ users, view }) => {
-  if (!users?.length) return null;
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isMobileLayout, setIsMobileLayout] = useState(false);
+const UserList: React.FC<UserListProps> = ({ users, excludeUserId = null }) => {
+  const [isMobile, setIsMobile] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const width = entry.contentRect.width;
-        // 👇 Switch to vertical when width < 650px (tweakable)
-        setIsMobileLayout(width < 650);
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        setIsMobile(e.contentRect.width < 650);
       }
     });
-
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
+    if (ref.current) ro.observe(ref.current);
+    return () => ro.disconnect();
   }, []);
 
+  if (!users || users.length === 0) return null;
 
-  const botUsers = users.filter((u) =>
-    BotNames.some((b) => b.toLowerCase() === u.id.toLowerCase())
-  );
-  const realUsers = users.filter(
-    (u) => !BotNames.some((b) => b.toLowerCase() === u.id.toLowerCase())
-  );
+  const realUsers = users.filter((u) => !BotNames.map(b=>b.toLowerCase()).includes(u.id.toLowerCase()));
+  const botUsers = users.filter((u) => BotNames.map(b=>b.toLowerCase()).includes(u.id.toLowerCase()));
 
-  const total = realUsers.length;
-  const colorForUser = (i: number) => COLORS[i % COLORS.length];
+  // exclude the active sharer from grid thumbnails
+  const shownUsers = excludeUserId ? realUsers.filter(u => u.id !== excludeUserId) : realUsers;
 
-  if (view === "circle") {
-    return (
-      <div
-        className="d-flex flex-wrap justify-content-center align-content-start gap-3 p-3 w-100 h-100"
-        style={{
-          background: "var(--surface)",
-          borderRadius: 16,
-          overflow: "auto",
-        }}
-      >
-        {realUsers.map((u, i) => (
-          <div
-            key={u.id}
-            className="rounded-circle d-flex align-items-center justify-content-center text-white"
-            style={{
-              width: 96,
-              height: 96,
-              background: colorForUser(i),
-              border: `2px solid ${u.speaking ? "var(--accent)" : "var(--border)"
-                }`,
-              fontWeight: 600,
-              fontSize: 28,
-            }}
-          >
-            {u.id.charAt(0).toUpperCase()}
-          </div>
-        ))}
-        {botUsers.length > 0 && <BotBox />}
-      </div>
-    );
-  }
-
-  const singleView = total === 1;
+  const singleView = shownUsers.length === 1;
 
   return (
-    <div
-      ref={containerRef}
-      className="w-100 h-100 p-3 participant-grid overflow-auto"
-      style={{
-        display: isMobileLayout ? "flex" : "grid",
-        flexDirection: isMobileLayout ? "column" : undefined,
-        alignItems: "center",
-        justifyContent: isMobileLayout ? "center" : undefined,
-        gridTemplateColumns: isMobileLayout ? undefined : "repeat(auto-fit, minmax(200px, 1fr))",
-        gap: "1rem",
-      }}
-    >
-      <AnimatePresence>
-        {realUsers.map((u: any, i: number) => (
-          <motion.div
-            key={u.id}
-            layout
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25 }}
-            style={{
-              width: isMobileLayout ? "100%" : "auto",
-              aspectRatio: isMobileLayout ? "1 / 1" : undefined,
-              maxWidth: isMobileLayout ? "400px" : "auto",
-            }}
-            className="participant-card-wrapper"
-          >
-            <UserCard user={u} color={colorForUser(i)} singleView={singleView} />
-          </motion.div>
-        ))}
-      </AnimatePresence>
-      {botUsers?.length > 0 && <BotBox />}
+    <div ref={ref} style={{ width: "100%", height: "100%", padding: 12 }}>
+      <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: isMobile ? undefined : "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+        <AnimatePresence>
+          {shownUsers.map((u, i) => (
+            <motion.div key={u.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+              <UserCard user={u} color={COLORS[i % COLORS.length]} singleView={singleView} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {botUsers.length > 0 && <BotBox />}
     </div>
   );
 };

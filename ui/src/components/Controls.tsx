@@ -1,7 +1,7 @@
-// src/components/Controls.tsx
 import React from 'react';
 import { Button, ButtonGroup, Container } from "react-bootstrap";
-import { FiMic, FiMicOff, FiVideo, FiVideoOff, FiPhoneOff, FiShare2 } from "react-icons/fi";
+import { FiMic, FiMicOff, FiPhoneOff, FiShare2, FiVideo, FiVideoOff, FiXSquare } from "react-icons/fi";
+import { VscLayoutSidebarRight, VscLayoutSidebarRightOff } from 'react-icons/vsc';
 import { ControlActionTypes } from '../types';
 import MicActivityIndicator from './MicActivityIndicator';
 
@@ -13,17 +13,21 @@ interface ControlsProps {
     isCameraOff: boolean;
     isSharing: boolean;
     isSpeaking: boolean,
-    isJoined: boolean
+    isJoined: boolean,
+    isSidebar: boolean
 }
 
-const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMuted, isCameraOff, isSharing, isSpeaking, isJoined }) => {
+const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMuted, isCameraOff, isSharing, isSpeaking, isJoined, isSidebar }) => {
     return (
         <Container fluid className="bg-dark p-3 d-flex flex-row align-items-center justify-content-between gap-3 border-top border-secondary">
             {/* Status Display */}
             <div className="d-flex justify-content-center" style={{ minWidth: '150px' }}>
                 <div className="px-3 py-2 border border-secondary rounded-pill text-white small text-truncate align-items-center d-flex">
+                    <div className="text-white fw-bold">
+                        {room}
+                    </div>
                     {status}
-                    {isJoined ? "Joined" : ""}
+                    {isJoined ? " Joined" : ""}
                 </div>
                 <MicActivityIndicator speaking={isSpeaking} />
             </div>
@@ -52,12 +56,12 @@ const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMute
 
                 {/* Share Content Button */}
                 <Button
-                    variant={isSharing ? "primary" : "outline-light"}
+                    variant={isSharing ? "danger" : "outline-light"}
                     onClick={() => performAction("share")}
-                    aria-label={isSharing ? "Stop sharing" : "Share content"}
+                    aria-label={isSharing ? "Stop sharing" : "Share screen"}
                     className="rounded-circle d-flex align-items-center justify-content-center p-3"
                 >
-                    <FiShare2 size={20} />
+                    {isSharing ? <FiXSquare size={20} /> : <FiShare2 size={20} />}
                 </Button>
 
                 {/* End Call Button */}
@@ -71,8 +75,16 @@ const Controls: React.FC<ControlsProps> = ({ performAction, status, room, isMute
                 </Button>
             </ButtonGroup>
 
-            {/* Room Label */}
-            <div className="text-white fw-bold" style={{ minWidth: '150px', textAlign: 'end' }}>{room}</div>
+            <ButtonGroup className="d-flex gap-3">
+                <Button
+                    variant={"outline-light"}
+                    onClick={() => performAction(ControlActionTypes.sidebar)}
+                    aria-label={isCameraOff ? "Turn camera on" : "Turn camera off"}
+                    className="p-2"
+                >
+                    {isSidebar ? <VscLayoutSidebarRight size={20} /> : <VscLayoutSidebarRightOff size={20} />}
+                </Button>
+            </ButtonGroup>
         </Container>
     );
 };

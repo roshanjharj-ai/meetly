@@ -1,1 +1,1 @@
-export const BotNames = ["jarvis", "bot"];
+export const BotNames = ["Jarvis", "bot"];

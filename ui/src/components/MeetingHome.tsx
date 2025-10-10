@@ -1,40 +1,63 @@
+// src/pages/MeetingHome.tsx
 import DOMPurify from 'dompurify';
 import { motion } from "framer-motion";
-import { useContext, useEffect, useMemo, useState } from "react";
-import { FaCircle, FaCompressAlt, FaExpandAlt, FaMoon, FaSun, FaThLarge } from "react-icons/fa";
-import { useNavigate } from 'react-router-dom';
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { FaCircle, FaMoon, FaRobot, FaSun } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import ChatPanel from "../components/ChatPanel";
+import Controls from "../components/Controls";
+import UserGrid from "../components/UserGrid";
+import UserList from "../components/UserList"; // your existing list component (used in side panel)
+import { BotNames } from "../Constants";
 import { UserContext } from "../context/UserContext";
-import { useWebRTC } from "../hooks/useWebRTC";
+import { useWebRTC, type ChatMessagePayload } from "../hooks/useWebRTC";
 import { ColorSchemes } from "../theme";
 import { ControlActionTypes } from "../types";
-import Controls from "./Controls";
-import UserList from "./UserList";
+
+/**
+ * MeetingHome - final version
+ * - center grid when no share
+ * - big shared screen + right participant list when someone shares
+ * - floating, draggable bot bubble bottom-left that pulses when botActive
+ * - floating chat top-right (minimizable)
+ * - floating auto-hide toolbar top-right
+ */
 
 export default function MeetingHome() {
     const userContext = useContext(UserContext);
-    const [view, setView] = useState<"grid" | "circle">("grid");
-    const [theme, setTheme] = useState<"dark" | "light">("dark");
-    const [isJoined, setIsJoined] = useState(false);
     const navigate = useNavigate();
+
+    const [theme, setTheme] = useState<"dark" | "light">("dark");
+    const [viewMode, setViewMode] = useState<"grid" | "circle">("grid");
+    const [isJoined, setIsJoined] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [isCameraOff, setIsCameraOff] = useState(false);
-    const [isSharing, setIsSharing] = useState(false);
-    const [fullscreenShare, setFullscreenShare] = useState(false);
-    const [status, setStatus] = useState("Not connected");
+    const [toolbarHover, setToolbarHover] = useState(false);
+    const [chatOpen, setChatOpen] = useState(true);
+    const [isSidebar, showSidebar] = useState(false);
+    const [botPanelOpen, setBotPanelOpen] = useState(false);
 
     const {
-        speaking,
         connect,
         disconnect,
         users,
         remoteStreams,
+        remoteScreens,
+        sharingBy,
         getLocalStream,
-        sharedContent,
-        sendContentUpdate,
-        peerStatus,
         broadcastStatus,
+        startScreenShare,
+        stopScreenShare,
+        isScreenSharing,
+        chatMessages,
+        sendChatMessage,
+        // botActive,
+        // botSpeaker,
+        peerStatus,
+        sharedContent
     } = useWebRTC(userContext.user.room, userContext.user.user);
 
+    // set CSS theme variables
     useEffect(() => {
         const colors = ColorSchemes[theme];
         const root = document.documentElement;
@@ -42,187 +65,220 @@ export default function MeetingHome() {
         root.setAttribute("data-theme", theme);
     }, [theme]);
 
-    async function joinRoom() {
-        setStatus("Connecting...");
-        await connect();
-        setIsJoined(true);
-        setStatus("Connected");
-    }
-
+    // join with fallback audio-only
     useEffect(() => {
-        joinRoom()
-    }, [userContext])
+        const start = async () => {
+            try {
+                await connect();
+                setIsJoined(true);
+            } catch (err) {
+                console.warn("connect failed, attempting audio-only fallback", err);
+                try {
+                    await navigator.mediaDevices.getUserMedia({ audio: true });
+                    await connect();
+                    setIsJoined(true);
+                } catch (err2) {
+                    console.error("fallback connect failed", err2);
+                }
+            }
+        };
+        start();
+        return () => {
+            disconnect();
+        };
+    }, [connect, disconnect]);
+
     function leaveRoom() {
-        disconnect(() => {
-            setTimeout(() => {
-                navigate("/")
-            }, 2000);
-            setIsJoined(false);
-        });
+        disconnect();
+        navigate("/");
     }
 
-    const performAction = (action: string) => {
+    const performAction = async (action: string) => {
         switch (action) {
-            case ControlActionTypes.end:
+            case "end":
                 leaveRoom();
                 break;
-            case ControlActionTypes.mute:
+            case "mute":
                 setIsMuted((prev) => {
-                    const newMuted = !prev;
-                    getLocalStream()?.getAudioTracks().forEach((t) => (t.enabled = !newMuted));
-                    broadcastStatus({ isMuted: newMuted, isCameraOff });
-                    return newMuted;
+                    const v = !prev;
+                    getLocalStream()?.getAudioTracks().forEach((t) => (t.enabled = !v));
+                    broadcastStatus({ isMuted: v, isCameraOff });
+                    return v;
                 });
                 break;
-            case ControlActionTypes.camera:
+            case ControlActionTypes.sidebar:
+                showSidebar((p) => !p);
+                break;
+            case "camera":
                 setIsCameraOff((prev) => {
-                    const newCamera = !prev;
-                    getLocalStream()?.getVideoTracks().forEach((t) => (t.enabled = !newCamera));
-                    broadcastStatus({ isMuted, isCameraOff: newCamera });
-                    return newCamera;
+                    const v = !prev;
+                    getLocalStream()?.getVideoTracks().forEach((t) => (t.enabled = !v));
+                    broadcastStatus({ isMuted, isCameraOff: v });
+                    return v;
                 });
                 break;
             case "share":
-                setIsSharing((s) => !s);
+                try {
+                    if (isScreenSharing) await stopScreenShare();
+                    else await startScreenShare();
+                } catch (e) {
+                    console.error("share error", e);
+                }
+                break;
+            case "chat":
+                setChatOpen((s) => !s);
                 break;
         }
     };
 
-    const allUsers = useMemo(() => {
-        const localUser = {
+    // prepare user list for grid
+    const userListForGrid = useMemo(() => {
+        const local = {
             id: userContext.user.user,
             stream: getLocalStream() ?? undefined,
             isMuted,
             isCameraOff,
             isLocal: true,
+            speaking: false,
         };
-        const remotes = users
-            .filter((id) => id !== userContext.user.user)
-            .map((id) => ({
-                id,
-                stream: remoteStreams[id],
-                isMuted: peerStatus[id]?.isMuted ?? false,
-                isCameraOff: peerStatus[id]?.isCameraOff ?? false,
-                isLocal: false,
-            }));
-        return [localUser, ...remotes];
-    }, [userContext.user.user, users, remoteStreams, peerStatus, isMuted, isCameraOff, getLocalStream]);
+        const remotes = users.filter((u) => u !== userContext.user.user).map((id) => ({
+            id,
+            stream: remoteStreams[id],
+            isMuted: false,
+            isCameraOff: false,
+            isLocal: false,
+            speaking: false,
+        }));
+        return [local, ...remotes];
+    }, [userContext.user.user, users, remoteStreams, getLocalStream, isMuted, isCameraOff]);
+
+    // active share
+    const shareRef = useRef<HTMLVideoElement | null>(null);
+    const activeSharer = sharingBy;
+    const activeStream = activeSharer ? remoteScreens[activeSharer] : null;
+    // const isSomeoneSharing = !!activeStream && activeSharer && activeSharer !== userContext.user.user;
+
+    useEffect(() => {
+        if (!shareRef.current) return;
+        if (activeStream) {
+            shareRef.current.srcObject = activeStream;
+            shareRef.current.muted = true;
+            shareRef.current.play().catch(() => { });
+        } else {
+            try {
+                shareRef.current.srcObject = null;
+            } catch { }
+        }
+    }, [activeStream]);
+
+    function handleSendChatMessage(msg: ChatMessagePayload) {
+        sendChatMessage(msg);
+    }
+
+    const [activeSidebarTab, setActiveSidebarTab] = useState<"chat" | "perticipants" | "settings">("perticipants")
 
     return (
         <div className="d-flex flex-column vh-100" style={{ background: "var(--background)", color: "var(--text)" }}>
-            {/* Middle section */}
-            <div className="flex-grow-1 position-relative overflow-hidden d-flex flex-column" style={{ minHeight: 0 }}>
-                {isSharing ? (
-                    <div className="d-flex w-100 h-100" style={{ minHeight: 0 }}>
-                        <div className="position-relative flex-grow-1 d-flex flex-column" style={{ overflow: "hidden" }}>
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                onClick={() => setFullscreenShare((f) => !f)}
-                                className="btn position-absolute top-0 end-0 m-3 rounded-pill z-3"
-                            >
-                                {fullscreenShare ? (
-                                    <>
-                                        <FaCompressAlt />
-                                    </>
-                                ) : (
-                                    <>
-                                        <FaExpandAlt />
-                                    </>
-                                )}
-                            </motion.button>
-                            <div className="d-flex flex-column h-100 p-3">
-                                <div
-                                    className="bg-light rounded h-100 p-3 text-dark overflow-auto"
-                                    dangerouslySetInnerHTML={{
-                                        __html: DOMPurify.sanitize(sharedContent || "<p>No shared content</p>"),
-                                    }}
-                                />
-                                <textarea
-                                    className="form-control bg-secondary text-white flex-grow-1 mx-0 my-3 rounded-4"
-                                    style={{ resize: "none" }}
-                                    onChange={(e) => sendContentUpdate(e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        {!fullscreenShare && (
+            {/* Floating auto-hide toolbar */}
+            <div style={{ position: "fixed", top: 12, left: 12, zIndex: 1700 }}
+                onMouseEnter={() => setToolbarHover(true)} onMouseLeave={() => setToolbarHover(false)}>
+                <motion.div initial={{ opacity: 0.12 }} animate={{ opacity: toolbarHover ? 1 : 0.12, x: toolbarHover ? 0 : -6 }} transition={{ duration: 0.18 }} style={{ display: "flex", gap: 8, padding: 6, borderRadius: 8, background: "rgba(0,0,0,0.28)", backdropFilter: "blur(6px)" }}>
+                    <button className="btn btn-sm btn-outline-light" onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}>{theme === "dark" ? <FaSun /> : <FaMoon />}</button>
+                    <button className="btn btn-sm btn-outline-light" onClick={() => setViewMode((v) => (v === "grid" ? "circle" : "grid"))}><FaCircle /></button>
+                    {/* <button className="btn btn-sm btn-outline-light" onClick={() => setChatOpen((s) => !s)}>Chat</button> */}
+                </motion.div>
+            </div>
+            {/* Main area */}
+            <div className="flex-grow-1 d-flex flex-row w-100 h-100 overflow-hidden" style={{ position: "relative" }}>
+                {/* Center area */}
+                <div className="flex-grow-1 d-flex align-items-center justify-content-center p-3" style={{ justifyContent: !activeStream ? "center" : "flex-start", alignItems: !activeStream ? "center" : "stretch", transition: "all 0.28s" }}>
+                    {activeStream ? (
+                        <motion.div className="flex-grow-1 d-flex align-items-center justify-content-center bg-black" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ borderRadius: 8, overflow: "hidden" }}>
+                            <video ref={shareRef} autoPlay playsInline className="w-100 h-100" style={{ objectFit: "contain", background: "#000" }} />
+                        </motion.div>
+                    ) : sharedContent != "" ?
+                        <div className="w-100 h-100 overflow-auto">
                             <div
-                                className="p-3 d-flex flex-column"
-                                style={{
-                                    width: 360,
-                                    background: "var(--surface)",
-                                    borderLeft: `1px solid var(--border)`,
+                                className="bg-light rounded h-100 p-3 text-dark overflow-auto"
+                                dangerouslySetInnerHTML={{
+                                    __html: DOMPurify.sanitize(sharedContent || "<p>No shared content</p>"),
                                 }}
-                            >
-                                <strong className="mb-2">Participants</strong>
-                                <div className="flex-grow-1 d-flex flex-column" style={{ minHeight: 0 }}>
-                                    <UserList users={allUsers} view={view} />
-                                </div>
+                            />
+                        </div> :
+                        (
+                            <div style={{ width: "100%", maxWidth: 1200 }}>
+                                <UserGrid users={userListForGrid} view={viewMode} />
                             </div>
                         )}
+                </div>
+
+
+                <div style={{ width: isSidebar ? 500 : 0, minWidth: 0, background: "var(--surface)", borderLeft: "1px solid rgba(255,255,255,0.3)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <div style={{ padding: 8, height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.02)" }}>
+                        <ul className="nav nav-tabs">
+                            <li className="nav-item">
+                                <a onClick={() => { setActiveSidebarTab("perticipants") }} className={activeSidebarTab == "perticipants" ? "nav-link active" : "nav-link"} aria-current="page" href="#">Participants</a>
+                            </li>
+                            <li className="nav-item">
+                                <a onClick={() => { setActiveSidebarTab("chat") }} className={activeSidebarTab == "chat" ? "nav-link active" : "nav-link"} href="#">Chat</a>
+                            </li>
+                            <li className="nav-item">
+                                <a onClick={() => { setActiveSidebarTab("settings") }} className={activeSidebarTab == "settings" ? "nav-link active" : "nav-link"} href="#">Settings</a>
+                            </li>
+                        </ul>
                     </div>
-                ) : (
-                    <>
-                        {/* Floating buttons */}
-                        <motion.div
-                            className="position-absolute top-0 start-0 m-3 d-flex gap-2 z-3"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                        >
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                                className="btn btn-outline-info rounded-pill px-3 py-2"
-                            >
-                                {theme === "dark" ? (
-                                    <>
-                                        <FaSun /> Light
-                                    </>
-                                ) : (
-                                    <>
-                                        <FaMoon /> Dark
-                                    </>
-                                )}
-                            </motion.button>
 
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                onClick={() => setView(view === "grid" ? "circle" : "grid")}
-                                className="btn btn-outline-info rounded-pill px-3 py-2"
-                            >
-                                {view === "grid" ? (
-                                    <>
-                                        <FaCircle /> Circle
-                                    </>
-                                ) : (
-                                    <>
-                                        <FaThLarge /> Grid
-                                    </>
-                                )}
-                            </motion.button>
-                        </motion.div>
-
-                        {/* Users grid */}
-                        <div style={{ flex: 1, minHeight: 0 }}>
-                            <UserList users={allUsers} view={view} />
-                        </div>
-                    </>
-                )}
+                    <div className="h-100" style={{ padding: 8, flex: 1 }}>
+                        {
+                            activeSidebarTab == "perticipants" ?
+                                <div style={{ overflowY: "auto", flex: 1 }}>
+                                    <UserList
+                                        users={users.map((id) => ({
+                                            id,
+                                            stream: remoteStreams[id],
+                                            isMuted: peerStatus[id]?.isMuted ?? false,
+                                            isCameraOff: peerStatus[id]?.isCameraOff ?? false,
+                                            isLocal: id === userContext.user.user,
+                                            speaking: false,
+                                        }))}
+                                        view={viewMode}
+                                        excludeUserId={sharingBy}
+                                    /> </div> :
+                                activeSidebarTab == "chat" ?
+                                    <ChatPanel messages={chatMessages} sendMessage={handleSendChatMessage} localUserId={userContext.user.user} className={chatOpen ? "" : "minimized"} /> :
+                                    <div>Setting Tab</div>
+                        }
+                    </div>
+                </div>
             </div>
 
             {/* Controls */}
-            <div style={{ flexShrink: 0 }}>
-                <Controls
-                    performAction={performAction}
-                    status={status}
-                    isJoined={isJoined}
-                    room={userContext.user.room}
-                    isMuted={isMuted}
-                    isCameraOff={isCameraOff}
-                    isSharing={isSharing}
-                    isSpeaking={speaking}
-                />
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                <Controls isSidebar={isSidebar} performAction={(a: string) => performAction(a)} status={isJoined ? "Connected" : "Not connected"} room={userContext.user.room} isMuted={isMuted} isCameraOff={isCameraOff} isSharing={isScreenSharing} isSpeaking={false} isJoined={isJoined} />
             </div>
-        </div>
+
+            {
+                botPanelOpen && (
+                    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} style={{ position: "fixed", left: 90, bottom: 12, zIndex: 1800, width: 320 }}>
+                        <div style={{ background: "rgba(0,0,0,0.8)", color: "#fff", padding: 12, borderRadius: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    <FaRobot /> <strong>Assistant</strong>
+                                </div>
+                                <button className="btn btn-sm btn-outline-light" onClick={() => setBotPanelOpen(false)}>Close</button>
+                            </div>
+                            <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                                {chatMessages.filter(m => (window as any).__BOT_NAMES__?.map((b: string) => b.toLowerCase()).includes(m.from?.toLowerCase()) || BotNames.map(b => b.toLowerCase()).includes(m.from?.toLowerCase())).slice(-10).map(m => (
+                                    <div key={m.id} style={{ marginBottom: 8, padding: 8, background: "rgba(255,255,255,0.02)", borderRadius: 6 }}>
+                                        <div style={{ fontWeight: 700 }}>{m.from}</div>
+                                        {m.text && <div>{m.text}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
+                )
+            }
+        </div >
     );
 }

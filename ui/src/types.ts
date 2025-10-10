@@ -14,5 +14,6 @@ export const ControlActionTypes = {
     mute: "mute",
     share: "share",
     raiseHand: "raiseHand",
-    camera: "camera"
+    camera: "camera",
+    sidebar: "sidebar"
 }

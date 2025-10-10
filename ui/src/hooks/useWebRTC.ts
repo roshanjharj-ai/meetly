@@ -1,305 +1,759 @@
+// src/hooks/useWebRTC.ts
+/* eslint-disable no-console */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BotNames } from "../Constants";
 
-const DEFAULT_SIGNALING_URL = import.meta.env.VITE_WEBSOCKET_URL || "ws://127.0.0.1:8000";
+/**
+ * Full-featured WebRTC hook with:
+ * - signaling via websocket (default ws://127.0.0.1:8000/ws/<room>/<user>)
+ * - per-peer RTCPeerConnections and datachannels
+ * - screen share send/receive
+ * - chat via datachannel
+ * - peerStatus broadcast
+ * - bot handling: bot_audio + bot_message from server, botActive/botSpeaker flags
+ *
+ * Exports (keeps compatibility):
+ * connect,
+ * disconnect,
+ * users,
+ * remoteStreams,
+ * remoteScreens,
+ * sharingBy,
+ * getLocalStream,
+ * sendContentUpdate,
+ * peerStatus,
+ * broadcastStatus,
+ * startScreenShare,
+ * stopScreenShare,
+ * isScreenSharing,
+ * chatMessages,
+ * sendChatMessage,
+ * botActive,
+ * botSpeaker,
+ * speaking
+ */
 
-// --- Type Definitions ---
+// types
+export type PeerStatus = { isMuted: boolean; isCameraOff: boolean };
+
+export type ChatMessagePayload = {
+  id: string;
+  from: string;
+  text?: string;
+  attachments?: { name: string; dataUrl: string }[];
+  ts: number;
+};
+
 type SignalMsg = {
-  type: "signal" | "user_list" | "error" | "bot_audio";
-  action?: "offer" | "answer" | "ice";
+  type?: string;
+  action?: string;
   from?: string;
   to?: string;
   payload?: any;
   users?: string[];
-  message?: string;
-  format?: string;
   data?: string;
-  speaker?: string; // ? added field
+  format?: string;
+  speaker?: string;
+  message?: string;
 };
 
 type DataChannelMessage =
   | { type: "content_update"; payload: string }
-  | { type: "status_update"; payload: PeerStatus };
+  | { type: "status_update"; payload: PeerStatus }
+  | { type: "screen_update"; payload: { sharing: boolean; by: string } }
+  | { type: "chat_message"; payload: ChatMessagePayload };
 
-type PeerStatus = { isMuted: boolean; isCameraOff: boolean };
-type PeerMap = Record<string, RTCPeerConnection>;
-type DCMap = Record<string, RTCDataChannel>;
+const DEFAULT_WS = "ws://127.0.0.1:8000";
 
-// --- The Hook ---
-export function useWebRTC(room: string, userId: string, signalingUrl?: string) {
-  const SIGNALING_URL = signalingUrl || DEFAULT_SIGNALING_URL;
-  const BOT_NAME = "Jarvis";
+/** Optional bot names - if you have a global constant, set window.__BOT_NAMES__ = [...] before load */
+const DEFAULT_BOT_NAMES = (window as any).__BOT_NAMES__ || ["Jarvis"];
 
-  // --- Refs for WebRTC objects ---
-  const wsRef = useRef<WebSocket | null>(null);
-  const peersRef = useRef<PeerMap>({});
-  const dataChannelsRef = useRef<DCMap>({});
-  const localStreamRef = useRef<MediaStream | null>(null);
+class WebRTCManager {
+  room: string;
+  userId: string;
+  wsUrl: string;
 
-  // --- Component State ---
-  const [users, setUsers] = useState<string[]>([]);
-  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
-  const [speaking, setSpeaking] = useState<boolean>(false);
-  const [sharedContent, setSharedContent] = useState<string>("");
-  const [peerStatus, setPeerStatus] = useState<Record<string, PeerStatus>>({});
-  const [botSpeaker, setBotSpeaker] = useState<string>(""); // ? new
+  ws: WebSocket | null = null;
+  peers: Record<string, RTCPeerConnection> = {};
+  dataChannels: Record<string, RTCDataChannel> = {};
+  localStream: MediaStream | null = null;
 
-  // Mic analyser internals
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const micRAFRef = useRef<number | null>(null);
+  screenStream: MediaStream | null = null;
+  screenSenders: Record<string, RTCRtpSender[]> = {};
 
-  const ICE_CONFIG: RTCConfiguration = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-  };
+  creatingPeer: Record<string, boolean> = {};
+  pendingScreen: string | null = null;
 
-  const _log = useCallback((...args: any[]) => console.log("[Client]", ...args), []);
+  // callbacks set by hook
+  onUsers?: (u: string[]) => void;
+  onRemoteStream?: (peerId: string, s: MediaStream | null) => void;
+  onRemoteScreen?: (peerId: string, s: MediaStream | null) => void;
+  onSharingBy?: (by: string | null) => void;
+  onPeerStatus?: (peerId: string, status: PeerStatus) => void;
+  onSharedContent?: (c: string) => void;
+  onChat?: (m: ChatMessagePayload) => void;
+  onBotAudio?: (data: string, fmt?: string, speaker?: string) => void;
+  onBotMessage?: (m: ChatMessagePayload) => void;
+  onBotActive?: (active: boolean) => void;
+  onUsersCount?: (n: number) => void;
 
-  const buildWsUrl = useCallback(() => {
-    const base = SIGNALING_URL.endsWith("/") ? SIGNALING_URL.slice(0, -1) : SIGNALING_URL;
-    const path = base.endsWith("/ws") ? "" : "/ws";
-    return `${base}${path}/${room}/${userId}`;
-  }, [SIGNALING_URL, room, userId]);
+  iceConfig: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-  // --- Audio Playback for Bot Messages ---
-  const playBase64Audio = useCallback((b64: string, fmt?: string) => {
-    try {
-      _log("Playing bot audio...");
-      const binary = atob(b64 || "");
-      const u8 = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) u8[i] = binary.charCodeAt(i);
-      const mime = fmt === "wav" ? "audio/wav" : "audio/mpeg";
-      const blob = new Blob([u8.buffer], { type: mime });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.play().catch(err => _log("Autoplay failed for bot audio:", err));
-      audio.onended = () => URL.revokeObjectURL(url);
-      audio.onerror = () => URL.revokeObjectURL(url);
-    } catch (e) {
-      _log("playBase64Audio error:", e);
+  constructor(room: string, userId: string, baseSignalingUrl?: string) {
+    this.room = room;
+    this.userId = userId;
+    const base = baseSignalingUrl || DEFAULT_WS;
+    // ensure no trailing slash
+    this.wsUrl = base.replace(/\/+$/, "") + `/ws/${this.room}/${this.userId}`;
+  }
+
+  log(...args: any[]) {
+    console.log("[useWebRTC]", ...args);
+  }
+
+  wsSend(obj: any) {
+    const s = JSON.stringify(obj);
+    if (!this.ws) {
+      this.log("wsSend: ws not ready, dropping", obj);
+      return;
     }
-  }, [_log]);
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(s);
+      return;
+    }
+    if (this.ws.readyState === WebSocket.CONNECTING) {
+      this.ws.addEventListener(
+        "open",
+        () => {
+          try {
+            this.ws?.send(s);
+          } catch (e) {
+            this.log("delayed send failed", e);
+          }
+        },
+        { once: true }
+      );
+      return;
+    }
+    this.log("wsSend: websocket not open", this.ws.readyState);
+  }
 
-
-  // --- Local Media & Mic Analysis ---
-  const startMicAnalyser = useCallback((stream: MediaStream) => {
+  async ensureLocalStream(audioOnly = false) {
+    if (this.localStream) return this.localStream;
     try {
-      if (audioCtxRef.current) audioCtxRef.current.close().catch(() => { });
-      const ctx = new AudioContext();
-      audioCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      source.connect(analyser);
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-      const threshold = 0.02;
-      let isSpeaking = false;
-
-      const step = () => {
-        analyser.getByteTimeDomainData(dataArray);
-        const rms = Math.sqrt(dataArray.reduce((sum, val) => sum + ((val - 128) / 128) ** 2, 0) / dataArray.length);
-
-        if (rms > threshold && !isSpeaking) {
-          isSpeaking = true;
-          setSpeaking(true);
-        } else if (rms < threshold && isSpeaking) {
-          isSpeaking = false;
-          setSpeaking(false);
-        }
-        micRAFRef.current = requestAnimationFrame(step);
-      };
-      micRAFRef.current = requestAnimationFrame(step);
+      const constraints = audioOnly ? { audio: true } : { audio: true, video: true };
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      return this.localStream;
     } catch (err) {
-      _log("Mic analyser failed:", err);
+      this.log("ensureLocalStream error", err);
+      throw err;
     }
-  }, [_log]);
+  }
 
-  const ensureLocalStream = useCallback(async () => {
-    if (!localStreamRef.current) {
+  async connect() {
+    // open ws and prepare local stream (if not available manager won't block - hook handles fallback)
+    try {
+      await this.ensureLocalStream().catch(() => { }); // caller may handle if user denies
+    } catch { }
+    this.log("Connecting to WS:", this.wsUrl);
+    const ws = new WebSocket(this.wsUrl);
+    this.ws = ws;
+
+    ws.onopen = () => {
+      this.log("WebSocket open:", this.wsUrl);
+    };
+
+    ws.onerror = (ev) => {
+      this.log("WebSocket error", ev);
+    };
+
+    ws.onclose = (ev) => {
+      this.log("WebSocket closed", ev);
+    };
+
+    ws.onmessage = async (evt) => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        localStreamRef.current = stream;
-        startMicAnalyser(stream);
+        console.log("onmessage:" + evt.data);
+        const msg: SignalMsg = JSON.parse(evt.data);
+        this.log("📨 WS message:", msg.type, msg.action, msg.from, "→", msg.to);
+        await this.onWsMessage(msg);
       } catch (err) {
-        _log("Failed to getUserMedia:", err);
-        throw err;
+        this.log("WS parse error", err);
       }
-    }
-    return localStreamRef.current;
-  }, [startMicAnalyser, _log]);
+    };
+  }
 
-  const getLocalStream = () => localStreamRef.current;
-
-  // --- Data Channel Message Handling ---
-  const handleDataChannelMessage = (event: MessageEvent, peerId: string) => {
+  disconnect() {
+    this.log("Manager disconnect");
     try {
-      const msg: DataChannelMessage = JSON.parse(event.data);
-      if (msg.type === "content_update") {
-        setSharedContent(msg.payload);
-      } else if (msg.type === "status_update") {
-        setPeerStatus((prev) => ({ ...prev, [peerId]: msg.payload }));
+      this.ws?.close();
+    } catch { }
+    Object.values(this.peers).forEach((pc) => {
+      try {
+        pc.close();
+      } catch { }
+    });
+    this.peers = {};
+    this.dataChannels = {};
+    if (this.localStream) this.localStream.getTracks().forEach((t) => t.stop());
+    if (this.screenStream) this.screenStream.getTracks().forEach((t) => t.stop());
+    this.screenStream = null;
+    this.screenSenders = {};
+    this.pendingScreen = null;
+    this.creatingPeer = {};
+    this.onUsers?.([]);
+    this.onSharingBy?.(null);
+    this.onBotActive?.(false);
+  }
+
+  async onWsMessage(msg: SignalMsg) {
+    if (!msg) return;
+
+    // --- 1️⃣ Handle user list updates ---
+    if (msg.type === "user_list") {
+      const list = msg.users || [];
+      this.onUsers?.(list);
+      this.onUsersCount?.(list.length || 0);
+
+      await new Promise((r) => setTimeout(r, 1000));
+      // Create peers for normal users
+      for (const user of list.filter((u) => u !== this.userId)) {
+        if (!this.peers[user]) {
+          const initiator = BotNames.indexOf(user) > -1 ? true : this.userId < user;
+          this.log(`[useWebRTC] Creating peer for ${user}, initiator=${initiator}`);
+          await this.createPeer(user, initiator);
+        }
+      }
+
+      // Ensure bot peers are established and handshake triggered
+      const botNames = (window as any).__BOT_NAMES__ || DEFAULT_BOT_NAMES;
+      for (const botName of botNames) {
+        if (!this.peers[botName]) {
+          this.log(`[useWebRTC] 🤖 Ensuring bot peer for ${botName}`);
+
+          try {
+            // create the peer (this will also try to send an offer via createPeer if initiator=true)
+            await this.createPeer(botName, true);
+
+            // In addition to what createPeer already sent, explicitly request the bot to start handshake.
+            // This is a no-op for normal servers but helpful for bots that create peers only on certain messages.
+            const req = { type: "signal", action: "offer_request", from: this.userId, to: botName, payload: null };
+            try {
+              this.log(`[useWebRTC] 🚀 Emitting offer_request to ${botName}`, req);
+              this.wsSend(req);
+            } catch (sendErr) {
+              this.log(`[useWebRTC] ⚠️ wsSend offer_request failed for ${botName}`, sendErr);
+            }
+
+          } catch (err) {
+            this.log(`[useWebRTC] ⚠️ Failed creating bot peer for ${botName}:`, err);
+          }
+        }
+      }
+
+      return;
+    }
+
+    // --- 2️⃣ Handle bot audio stream ---
+    if (msg.type === "bot_audio") {
+      this.onBotAudio?.(msg.data || msg.payload || "", msg.format, msg.speaker);
+      this.onBotActive?.(!!msg.speaker);
+      return;
+    }
+
+    // --- 3️⃣ Handle bot text message ---
+    if (msg.type === "bot_message") {
+      const m: ChatMessagePayload = {
+        id: `bot-${Date.now()}`,
+        from: msg.speaker || "Bot",
+        text: msg.message || msg.payload || "",
+        ts: Date.now(),
+      };
+      this.onBotMessage?.(m);
+      this.onChat?.(m);
+      return;
+    }
+
+    if (msg.type === "signal" && msg.action === "offer_request") {
+      this.log(`[useWebRTC] 🤖 Received offer_request from ${msg.from}`);
+      const from = msg.from!;
+      try {
+        // create peer as initiator=false (let bot send offer)
+        await this.createPeer(from, false);
+      } catch (err) {
+        this.log(`[useWebRTC] ⚠️ Failed to create peer on offer_request:`, err);
+      }
+      return;
+    }
+
+    // --- 4️⃣ Handle WebRTC signaling ---
+    if (msg.type === "signal") {
+      await this.handleSignal(msg);
+      return;
+    }
+  }
+
+
+  async handleSignal(msg: SignalMsg) {
+    const { action, from, payload } = msg;
+    const desc = payload?.sdp ? new RTCSessionDescription(payload) : payload;
+    if (!from) return;
+    if (!this.peers[from]) {
+      await this.createPeer(from, false);
+    }
+    const pc = this.peers[from];
+    if (!pc) return;
+    try {
+      if (action === "offer") {
+        // if remote's offer comes when local state isn't stable, skip or handle gracefully
+        if (pc.signalingState !== "stable") {
+          this.log("Remote offer received but pc signalingState not stable:", pc.signalingState);
+        }
+        await pc.setRemoteDescription(desc);
+        const ans = await pc.createAnswer();
+        await pc.setLocalDescription(ans);
+        this.wsSend({ type: "signal", action: "answer", from: this.userId, to: from, payload: pc.localDescription });
+      } else if (action === "answer") {
+        // remote answered our offer
+        try {
+          await pc.setRemoteDescription(desc);
+        } catch (err) {
+          this.log("setRemoteDescription(answer) failed:", err);
+        }
+      } else if (action === "ice" || action === "candidate") {
+        if (payload) {
+          try {
+            await pc.addIceCandidate(payload);
+          } catch (e) {
+            this.log("addIceCandidate failed", e);
+          }
+        }
+      } else if (action === "screen_update") {
+        const { sharing, by } = payload || {};
+        if (sharing) {
+          this.pendingScreen = by;
+          this.onSharingBy?.(by);
+        } else {
+          if (this.pendingScreen === by) this.pendingScreen = null;
+          this.onRemoteScreen?.(by, null);
+          this.onSharingBy?.(null);
+        }
       }
     } catch (err) {
-      _log("DC message parse error:", err);
+      this.log("handleSignal error", err);
     }
-  };
+  }
 
-  // --- Peer Connection Management ---
-  const createPeer = useCallback(async (targetId: string, isInitiator: boolean) => {
-    if (peersRef.current[targetId]) return peersRef.current[targetId];
+  private handleDataChannelMessage(ev: MessageEvent, peerId: string) {
+    try {
+      const obj = JSON.parse(ev.data) as DataChannelMessage;
+      if (!obj || !obj.type) return;
+      if (obj.type === "content_update") this.onSharedContent?.(obj.payload);
+      else if (obj.type === "status_update") this.onPeerStatus?.(peerId, obj.payload);
+      else if (obj.type === "screen_update") {
+        const { sharing, by } = obj.payload;
+        if (sharing) {
+          this.pendingScreen = by;
+          this.onSharingBy?.(by);
+        } else {
+          this.onRemoteScreen?.(by, null);
+          this.onSharingBy?.(null);
+        }
+      } else if (obj.type === "chat_message") {
+        this.onChat?.(obj.payload);
+      }
+    } catch (err) {
+      this.log("datachannel parse error", err);
+    }
+  }
 
-    _log(`Creating peer for ${targetId}, initiator: ${isInitiator}`);
-    const pc = new RTCPeerConnection(ICE_CONFIG);
+  private attachLocalTracks(pc: RTCPeerConnection) {
+    if (!this.localStream) return;
+    this.localStream.getTracks().forEach((t) => {
+      try {
+        pc.addTrack(t, this.localStream as MediaStream);
+      } catch { }
+    });
+  }
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: "signal", action: "ice", from: userId, to: targetId, payload: event.candidate }));
+  async createPeer(targetId: string, initiator: boolean) {
+    if (this.peers[targetId]) return this.peers[targetId];
+    if (this.creatingPeer[targetId]) {
+      // wait for existing creation
+      for (let i = 0; i < 20; i++) {
+        if (this.peers[targetId]) return this.peers[targetId];
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    this.creatingPeer[targetId] = true;
+    this.log("Creating peer for", targetId, "initiator:", initiator);
+
+    const pc = new RTCPeerConnection(this.iceConfig);
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        this.wsSend({ type: "signal", action: "ice", from: this.userId, to: targetId, payload: e.candidate });
       }
     };
 
     pc.ontrack = (evt) => {
-      _log(`[pc:${targetId}] ontrack received stream`);
-      setRemoteStreams(prev => ({ ...prev, [targetId]: evt.streams[0] }));
+      try {
+        const stream = evt.streams[0];
+        const track = evt.track;
+        const settings = (track as any).getSettings?.() || {};
+        const displaySurface = String(settings.displaySurface || "").toLowerCase();
+        let isScreen = false;
+        if (track.kind === "video") {
+          if (displaySurface === "monitor" || displaySurface === "window" || displaySurface === "application") isScreen = true;
+          else if ((track.label || "").toLowerCase().includes("screen")) isScreen = true;
+          else if (this.pendingScreen === targetId) { isScreen = true; this.pendingScreen = null; }
+        }
+        if (isScreen) {
+          this.log("Received screen track from", targetId);
+          this.onRemoteScreen?.(targetId, stream);
+          this.onSharingBy?.(targetId);
+        } else {
+          this.log("Received normal media track from", targetId);
+          this.onRemoteStream?.(targetId, stream);
+        }
+      } catch (err) {
+        this.log("ontrack error", err);
+      }
     };
 
     pc.onconnectionstatechange = () => {
       if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
-        pc.close();
-        delete peersRef.current[targetId];
-        delete dataChannelsRef.current[targetId];
-        setRemoteStreams(prev => { const p = { ...prev }; delete p[targetId]; return p; });
-        setPeerStatus(prev => { const s = { ...prev }; delete s[targetId]; return s; });
+        try { pc.close(); } catch { }
+        delete this.peers[targetId];
+        delete this.dataChannels[targetId];
+        delete this.screenSenders[targetId];
+        this.onRemoteStream?.(targetId, null);
+        this.onRemoteScreen?.(targetId, null);
+        this.onPeerStatus?.(targetId, { isMuted: false, isCameraOff: false });
+        this.onSharingBy?.(null);
       }
     };
+    console.log("initiator:" + initiator);
+    // datachannel
+    if (initiator) {
+      try {
+        // create offer as before
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        const dc = pc.createDataChannel("datachannel");
+        this.dataChannels[targetId] = dc;
+        dc.onmessage = (ev) => this.handleDataChannelMessage(ev, targetId);
 
-    // Data Channel Setup
-    if (isInitiator) {
-      const dc = pc.createDataChannel("datachannel");
-      dc.onmessage = (event) => handleDataChannelMessage(event, targetId);
-      dataChannelsRef.current[targetId] = dc;
+        // Build a plain JS payload (avoid any non-serializable fields)
+        const payload = {
+          sdp: pc.localDescription?.sdp,
+          type: pc.localDescription?.type,
+        };
+
+        // log for debugging
+        this.log(`[useWebRTC] Sending SDP offer to ${targetId}`, { to: targetId, payload: { type: payload.type } });
+
+        // send in normal 'signal' envelope with explicit payload shape
+        this.wsSend({ type: "signal", action: "offer", from: this.userId, to: targetId, payload });
+
+        // if target is a BOT, also send a short "offer_request" to encourage bot side
+        const botNames = (window as any).__BOT_NAMES__ || DEFAULT_BOT_NAMES;
+        if (botNames.includes(targetId)) {
+          try {
+            this.log(`[useWebRTC] Also sending explicit offer_request to bot ${targetId}`);
+            this.wsSend({ type: "signal", action: "offer_request", from: this.userId, to: targetId, payload: null });
+          } catch (err) {
+            this.log(`[useWebRTC] offer_request send failed for ${targetId}`, err);
+          }
+        }
+      } catch (err) {
+        this.log("createOffer failed", err);
+      }
     } else {
-      pc.ondatachannel = (event) => {
-        const dc = event.channel;
-        dc.onmessage = (e) => handleDataChannelMessage(e, targetId);
-        dataChannelsRef.current[targetId] = dc;
+      pc.ondatachannel = (e) => {
+        const dc = e.channel;
+        this.dataChannels[targetId] = dc;
+        dc.onmessage = (msg) => this.handleDataChannelMessage(msg, targetId);
+        dc.onopen = () => this.log("DC (rcv) open from", targetId);
       };
     }
 
-    const localStream = await ensureLocalStream();
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    // attach local tracks
+    this.attachLocalTracks(pc);
 
-    if (isInitiator) {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      wsRef.current?.send(JSON.stringify({ type: "signal", action: "offer", from: userId, to: targetId, payload: pc.localDescription }));
+    // attach screen tracks if already sharing
+    if (this.screenStream) {
+      const arr: RTCRtpSender[] = [];
+      this.screenStream.getTracks().forEach((t) => {
+        try {
+          const s = pc.addTrack(t, this.screenStream as MediaStream);
+          if (s) arr.push(s);
+        } catch { }
+      });
+      if (arr.length) this.screenSenders[targetId] = arr;
     }
 
-    peersRef.current[targetId] = pc;
+    if (initiator) {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.wsSend({ type: "signal", action: "offer", from: this.userId, to: targetId, payload: pc.localDescription });
+      } catch (err) {
+        this.log("createOffer failed", err);
+      }
+    }
+
+    this.peers[targetId] = pc;
+    this.creatingPeer[targetId] = false;
     return pc;
-  }, [ensureLocalStream, userId, _log]);
+  }
 
-  const handleSignal = useCallback(async (msg: SignalMsg) => {
-    const { action, from, payload } = msg;
-    if (!from) return;
-
-    const pc = peersRef.current[from] || await createPeer(from, false);
-
-    if (action === "offer") {
-      await pc.setRemoteDescription(payload);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      wsRef.current?.send(JSON.stringify({ type: "signal", action: "answer", from: userId, to: from, payload: pc.localDescription }));
-    } else if (action === "answer") {
-      await pc.setRemoteDescription(payload);
-    } else if (action === "ice") {
-      if (payload) await pc.addIceCandidate(payload);
-    }
-  }, [createPeer, userId]);
-
-  // --- Data Channel Communication ---
-  const broadcastOverDataChannels = (message: DataChannelMessage) => {
-    const msgString = JSON.stringify(message);
-    Object.values(dataChannelsRef.current).forEach(dc => {
-      if (dc.readyState === 'open') {
-        dc.send(msgString);
+  broadcastDataChannel(message: DataChannelMessage) {
+    const s = JSON.stringify(message);
+    Object.values(this.dataChannels).forEach((dc) => {
+      try {
+        if (dc.readyState === "open") dc.send(s);
+      } catch (e) {
+        this.log("dc send error", e);
       }
     });
-  };
+  }
+
+  sendContentUpdate(content: string) {
+    this.broadcastDataChannel({ type: "content_update", payload: content });
+  }
+
+  broadcastStatus(status: PeerStatus) {
+    this.broadcastDataChannel({ type: "status_update", payload: status });
+  }
+
+  sendChatMessage(payload: ChatMessagePayload) {
+    this.broadcastDataChannel({ type: "chat_message", payload });
+  }
+
+  async startScreenShare() {
+    if (this.screenStream) return;
+    try {
+      const displayStream = await (navigator.mediaDevices as any).getDisplayMedia({ video: { cursor: "always" }, audio: false });
+      this.screenStream = displayStream;
+      Object.entries(this.peers).forEach(([peerId, pc]) => {
+        const added: RTCRtpSender[] = [];
+        displayStream.getTracks().forEach((t: any) => {
+          try {
+            const s = pc.addTrack(t, displayStream);
+            if (s) added.push(s);
+          } catch (e) {
+            this.log("addTrack screen failed", e);
+          }
+        });
+        if (added.length) this.screenSenders[peerId] = added;
+        // renegotiate by creating offer
+        if (pc.signalingState === "stable") {
+          pc.createOffer()
+            .then((offer) => pc.setLocalDescription(offer))
+            .then(() => this.wsSend({ type: "signal", action: "offer", from: this.userId, to: peerId, payload: pc.localDescription }))
+            .catch((e) => this.log("renegotiate error:", e));
+        }
+      });
+
+      // notify server
+      this.wsSend({ type: "signal", action: "screen_update", from: this.userId, payload: { sharing: true, by: this.userId } });
+      this.broadcastDataChannel({ type: "screen_update", payload: { sharing: true, by: this.userId } });
+
+      displayStream.getVideoTracks().forEach((t: any) => { t.onended = () => this.stopScreenShare(); });
+    } catch (err) {
+      this.log("startScreenShare failed", err);
+      throw err;
+    }
+  }
+
+  stopScreenShare() {
+    try {
+      if (this.screenStream) {
+        this.screenStream.getTracks().forEach((t) => { try { t.stop(); } catch { } });
+        this.screenStream = null;
+      }
+      Object.entries(this.screenSenders).forEach(([peerId, senders]) => {
+        const pc = this.peers[peerId];
+        try {
+          senders.forEach((s) => pc.removeTrack(s));
+        } catch { }
+      });
+      this.screenSenders = {};
+      this.wsSend({ type: "signal", action: "screen_update", from: this.userId, payload: { sharing: false, by: this.userId } });
+      this.broadcastDataChannel({ type: "screen_update", payload: { sharing: false, by: this.userId } });
+      this.pendingScreen = null;
+      this.onSharingBy?.(null);
+      this.onRemoteScreen?.(this.userId, null);
+    } catch (err) {
+      this.log("stopScreenShare error", err);
+    }
+  }
+}
+
+/** React hook wrapper returning the full API the app expects */
+export function useWebRTC(room: string, userId: string, signalingBase?: string) {
+  const mgrRef = useRef<WebRTCManager | null>(null);
+
+  const [users, setUsers] = useState<string[]>([]);
+  const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [remoteScreens, setRemoteScreens] = useState<Record<string, MediaStream>>({});
+  const [sharingBy, setSharingBy] = useState<string | null>(null);
+  const [peerStatus, setPeerStatus] = useState<Record<string, PeerStatus>>({});
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessagePayload[]>([]);
+  const [botActive, setBotActive] = useState(false);
+  const [botSpeaker, setBotSpeaker] = useState<string>("");
+  const [sharedContent, setSharedContent] = useState<string>("");
+
+  // create manager once
+  useEffect(() => {
+    if (!mgrRef.current) mgrRef.current = new WebRTCManager(room, userId, signalingBase);
+    const mgr = mgrRef.current;
+
+    mgr.onUsers = (u) => setUsers(u);
+    mgr.onRemoteStream = (peerId, stream) => setRemoteStreams((prev) => {
+      const n = { ...prev };
+      if (stream) n[peerId] = stream;
+      else delete n[peerId];
+      return n;
+    });
+    mgr.onRemoteScreen = (peerId, stream) => setRemoteScreens((prev) => {
+      const n = { ...prev };
+      if (stream) n[peerId] = stream;
+      else delete n[peerId];
+      return n;
+    });
+    mgr.onSharingBy = (by) => setSharingBy(by);
+    mgr.onPeerStatus = (peerId, st) => setPeerStatus((p) => ({ ...p, [peerId]: st }));
+    mgr.onSharedContent = (c) => {
+      setSharedContent(c)
+    };
+    mgr.onBotAudio = (data, fmt, speaker) => {
+      try {
+        console.log("Playing bot audio...");
+        const binary = atob(data || "");
+        const u8 = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) u8[i] = binary.charCodeAt(i);
+
+        const mime = fmt === "wav" ? "audio/wav" : "audio/mpeg";
+        const blob = new Blob([u8], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+
+        // Try to ensure autoplay works
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => console.log("Audio playback started"))
+            .catch(err => {
+              console.warn("Autoplay failed for bot audio:", err);
+              // attempt to resume AudioContext if blocked
+              if (typeof AudioContext !== "undefined") {
+                const ctx = new AudioContext();
+                if (ctx.state === "suspended") {
+                  ctx.resume().then(() => {
+                    // const src = ctx.createBufferSource();
+                    console.log("Audio context resumed, trying again...");
+                    audio.play().catch(() => { });
+                  });
+                }
+              }
+            });
+        }
+
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          setBotActive(false);
+        };
+        audio.onerror = (e) => {
+          console.error("Audio playback error", e);
+          URL.revokeObjectURL(url);
+        };
+
+        setBotSpeaker(speaker || "");
+        setBotActive(true);
+      } catch (err) {
+        console.error("bot audio play failed", err);
+      }
+    };
+    mgr.onBotMessage = (m) => {
+      setChatMessages((prev) => [...prev, m]);
+    };
+    mgr.onChat = (m) => setChatMessages((prev) => [...prev, m]);
+    mgr.onBotActive = (a) => setBotActive(!!a);
+
+    // allow manager to call a "speaking" handler (if you add detection)
+    // mgr.onUsersCount = (n) => { /* optional */ };
+
+    // cleanup: don't auto-disconnect here — caller will call disconnect when required
+    return () => { /* no-op */ };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const connect = useCallback(async (audioOnly = false) => {
+    if (!mgrRef.current) mgrRef.current = new WebRTCManager(room, userId, signalingBase);
+    try {
+      await mgrRef.current.ensureLocalStream(audioOnly);
+    } catch (err) {
+      throw err;
+    }
+    await mgrRef.current.connect();
+  }, [room, userId, signalingBase]);
+
+  const disconnect = useCallback((cb?: any) => {
+    mgrRef.current?.disconnect();
+    if (typeof cb === "function") cb();
+  }, []);
+
+  const startScreenShare = useCallback(async () => {
+    await mgrRef.current?.startScreenShare();
+    setIsScreenSharing(true);
+  }, []);
+
+  const stopScreenShare = useCallback(() => {
+    mgrRef.current?.stopScreenShare();
+    setIsScreenSharing(false);
+  }, []);
 
   const sendContentUpdate = useCallback((content: string) => {
-    broadcastOverDataChannels({ type: 'content_update', payload: content });
+    mgrRef.current?.sendContentUpdate(content);
   }, []);
 
   const broadcastStatus = useCallback((status: PeerStatus) => {
-    broadcastOverDataChannels({ type: 'status_update', payload: status });
+    mgrRef.current?.broadcastStatus(status);
+    setPeerStatus((prev) => {
+      const s = { ...prev };
+      s[userId] = status;
+      return s;
+    });
+  }, [userId]);
+
+  const sendChatMessage = useCallback((msg: ChatMessagePayload) => {
+    mgrRef.current?.sendChatMessage(msg);
+    setChatMessages((prev) => [...prev, msg]);
   }, []);
 
-  // --- Main Connect/Disconnect Logic ---
-  const connect = useCallback(async () => {
-    await ensureLocalStream();
-    const url = buildWsUrl();
-    _log("Connecting to:", url);
+  const getLocalStream = useCallback(() => mgrRef.current?.localStream ?? null, []);
 
-    const ws = new WebSocket(url);
-    ws.onmessage = async (evt) => {
-      try {
-        const msg: SignalMsg = JSON.parse(evt.data);
-        if (msg.type === "user_list") {
-          const list = msg.users || [];
-          setUsers(list);
-          for (const peerId of list.filter(u => u !== userId)) {
-            if (peersRef.current[peerId]) continue;
-            const isInitiator = peerId === BOT_NAME ? true : userId < peerId;
-            await createPeer(peerId, isInitiator);
-          }
-        } else if (msg.type === "signal") {
-          await handleSignal(msg);
-        } else if (msg.type === "bot_audio") {
-          // --- FIX: Added this block to handle audio from the bot ---
-          playBase64Audio(msg.data || "", msg.format);
-          setBotSpeaker(msg.speaker || ""); // ? new: track speaker name
-        }
-      } catch (err) {
-        _log("WS message parse error:", err);
-      }
-    };
-    wsRef.current = ws;
-  }, [buildWsUrl, ensureLocalStream, createPeer, handleSignal, userId, BOT_NAME, _log, playBase64Audio]);
-
-  const disconnect = useCallback((callBck: any) => {
-    _log("Disconnecting...");
-    wsRef.current?.close();
-    Object.values(peersRef.current).forEach(pc => pc.close());
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(t => t.stop());
-    }
-    if (micRAFRef.current) cancelAnimationFrame(micRAFRef.current);
-    if (audioCtxRef.current) audioCtxRef.current.close().catch(() => { });
-
-    // Reset all state
-    localStreamRef.current = null;
-    peersRef.current = {};
-    dataChannelsRef.current = {};
-    setUsers([]);
-    setRemoteStreams({});
-    setPeerStatus({});
-    setSharedContent("");
-    setBotSpeaker(""); // ? reset
-    callBck();
-  }, [_log]);
-
-  useEffect(() => () => disconnect(() => { }), [disconnect]);
-
-  // --- Final Return Value ---
   return {
-    speaking,
     connect,
     disconnect,
     users,
     remoteStreams,
+    remoteScreens,
+    sharingBy,
     getLocalStream,
-    sharedContent,
     sendContentUpdate,
     peerStatus,
     broadcastStatus,
-    botSpeaker, // ? new export
+    startScreenShare,
+    stopScreenShare,
+    isScreenSharing,
+    chatMessages,
+    sendChatMessage,
+    botActive,
+    botSpeaker,
+    sharedContent
   };
 }
