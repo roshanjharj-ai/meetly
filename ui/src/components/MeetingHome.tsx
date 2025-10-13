@@ -9,7 +9,7 @@ import Controls from "../components/Controls";
 import UserGrid from "../components/UserGrid";
 import UserList from "../components/UserList";
 import { UserContext } from "../context/UserContext";
-import { useWebRTC, type ChatMessagePayload } from "../hooks/useWebRTC";
+import { useWebRTC } from "../hooks/useWebRTC";
 import { ControlActionTypes } from "../types";
 
 // --- START: FIX ---
@@ -81,7 +81,7 @@ export default function MeetingHome() {
     }, [connect]);
 
     const disconnectingRef = useRef(false);
-    const performAction = useCallback(async (action: string) => {        
+    const performAction = useCallback(async (action: string) => {
         switch (action) {
             case "end": {
                 if (disconnectingRef.current) return;

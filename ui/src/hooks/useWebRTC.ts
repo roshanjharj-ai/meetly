@@ -178,10 +178,10 @@ class WebRTCManager {
 
       // Restore and clear any replaced senders map (if present)
       try {
-        Object.entries(this.screenSenders || {}).forEach(([peerId, replacedList]) => {
-          const pc = this.peers[peerId];
-          // we already closed pcs above; if you still want to restore, handle it here.
-        });
+        // Object.entries(this.screenSenders || {}).forEach(([peerId]) => {
+        //   // const pc = this.peers[peerId];
+        //   // we already closed pcs above; if you still want to restore, handle it here.
+        // });
       } catch { }
 
       this.screenSenders = {};

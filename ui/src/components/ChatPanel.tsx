@@ -1,7 +1,6 @@
 // src/components/ChatPanel.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { BiPaperPlane } from "react-icons/bi";
-import { FiPaperclip } from "react-icons/fi";
 import type { ChatMessagePayload } from "../hooks/useWebRTC";
 
 export interface ChatPanelProps {
