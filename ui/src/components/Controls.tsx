@@ -5,6 +5,7 @@ import {
     FiDisc,
     FiMic,
     FiMicOff,
+    FiMoreVertical, // Added for the mobile menu
     FiPhoneOff,
     FiShare,
     FiVideo,
@@ -12,7 +13,7 @@ import {
 } from "react-icons/fi";
 import { LuPanelRight, LuPanelRightClose } from "react-icons/lu";
 import { PiTelevisionSimpleBold } from "react-icons/pi";
-import { ControlActionTypes } from "../types"; // Ensure this path is correct
+import { ControlActionTypes } from "../types";
 
 interface ControlsProps {
     performAction: (action: string) => void;
@@ -36,56 +37,140 @@ const Controls = ({
     isSharing,
     isSpeaking,
     isSidebar,
-    isRecording, // New prop
+    isRecording,
 }: ControlsProps) => {
     const [isShareMenuOpen, setShareMenuOpen] = useState(false);
+    // --- START: State for the new mobile "More" menu ---
+    const [isMoreMenuOpen, setMoreMenuOpen] = useState(false);
+    // --- END: State for the new mobile "More" menu ---
 
     const handleShare = (mode: "none" | "mic" | "system") => {
         performAction(isSharing ? ControlActionTypes.shareStop : `share-${mode}`);
         setShareMenuOpen(false); // Close menu after selection
     };
 
-    // --- Start of New Animations ---
-
-    // 1. Define animation variants for the pill's background color
+    // Animation variants for the pill's background color
     const pillVariants = {
         disconnected: { backgroundColor: "#dc3545" /* Red */ },
         connected: { backgroundColor: "#28a745" /* Green */ },
         speaking: { backgroundColor: "#ffc107" /* Yellow */ },
     };
 
-    // 2. Create logic to determine the current state of the pill
     const getPillState = () => {
-        if (status !== "Connected") {
-            return "disconnected";
-        }
+        if (status !== "Connected") return "disconnected";
         return isSpeaking ? "speaking" : "connected";
     };
 
-    // 3. Define transitions for the speaking dot
+    // Animation targets and transitions for the speaking dot
     const speakingTransition = {
         duration: 1.2,
         repeat: Infinity,
         repeatType: "loop" as const,
         ease: "easeInOut" as const,
     };
-    const idleTransition = {
-        duration: 0.3,
-        ease: "easeInOut" as const,
-    };
-
-    // 4. Define animation targets for the speaking dot (color is now high-contrast)
+    const idleTransition = { duration: 0.3, ease: "easeInOut" as const };
     const speakingDotAnimate = {
         scale: isSpeaking ? [1, 1.5, 1] : 1,
         backgroundColor: isSpeaking ? "#FFFFFF" : "#dee2e6",
     };
 
-    // --- End of New Animations ---
-
-    const shareMenuVariants = {
+    // Animation variants for menus
+    const menuVariants = {
         hidden: { opacity: 0, y: 10, scale: 0.95, transition: { duration: 0.15 } },
         visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.15 } },
     };
+
+
+    // --- START: Reusable Control Button Components ---
+    // To avoid repetition between mobile and desktop views, we define them once.
+
+    const MuteButton = () => (
+        <motion.button
+            onClick={() => performAction(ControlActionTypes.mute)}
+            aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+            className={`control-button ${isMuted ? 'active-toggle' : ''}`}
+        >
+            {isMuted ? <FiMicOff size={20} /> : <FiMic size={20} />}
+        </motion.button>
+    );
+
+    const CameraButton = () => (
+         <motion.button
+            onClick={() => performAction(ControlActionTypes.camera)}
+            aria-label={isCameraOff ? "Turn camera on" : "Turn camera off"}
+            className={`control-button ${isCameraOff ? 'active-toggle' : ''}`}
+        >
+            {isCameraOff ? <FiVideoOff size={20} /> : <FiVideo size={20} />}
+        </motion.button>
+    );
+
+    const RecordButton = () => (
+        <motion.button
+            onClick={() => performAction("record")}
+            aria-label={isRecording ? "Stop recording" : "Start recording"}
+            className={`control-button ${isRecording ? 'hang-up' : ''}`}
+        >
+            <FiDisc size={20} />
+        </motion.button>
+    );
+
+    const ShareButton = () => (
+         <div className="position-relative d-flex align-items-center">
+            <motion.button
+                onClick={() => {
+                    if (isSharing) handleShare('none');
+                    else setShareMenuOpen(!isShareMenuOpen);
+                }}
+                aria-label={isSharing ? "Stop screen sharing" : "Share screen"}
+                className={`control-button ${isSharing ? 'active-toggle' : ''}`}
+            >
+                <FiShare size={20} />
+            </motion.button>
+            <AnimatePresence>
+                {isShareMenuOpen && (
+                    <motion.div
+                        className="share-dropdown-menu"
+                        variants={menuVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="hidden"
+                    >
+                        <div className="share-dropdown-item" onClick={() => handleShare("none")}>
+                            <PiTelevisionSimpleBold size={18} /> <span className="small">Share Screen</span>
+                        </div>
+                        <div className="share-dropdown-item" onClick={() => handleShare("mic")}>
+                            <FiMic size={18} /> <span className="small">Share with Mic</span>
+                        </div>
+                        <div className="share-dropdown-item" onClick={() => handleShare("system")}>
+                            <BsEarbuds size={18} /> <span className="small">Share with Audio</span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+
+    const EndCallButton = () => (
+        <motion.button
+            onClick={() => performAction(ControlActionTypes.end)}
+            aria-label="End call"
+            className="control-button hang-up"
+        >
+            <FiPhoneOff size={22} />
+        </motion.button>
+    );
+
+    const SidebarButton = () => (
+        <motion.button
+            onClick={() => performAction(ControlActionTypes.sidebar)}
+            aria-label={isSidebar ? "Hide sidebar" : "Show sidebar"}
+            className="control-button"
+        >
+            {isSidebar ? <LuPanelRightClose size={22} /> : <LuPanelRight size={22} />}
+        </motion.button>
+    );
+    // --- END: Reusable Control Button Components ---
+
 
     return (
         <>
@@ -141,6 +226,7 @@ const Controls = ({
                     border-radius: 8px;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                     padding: 0.5rem 0;
+                    z-index: 1010;
                 }
                 .share-dropdown-item {
                     display: flex;
@@ -154,28 +240,40 @@ const Controls = ({
                 .share-dropdown-item:hover {
                     background-color: #495057;
                 }
+
+                /* --- START: New Mobile Menu Styles --- */
+                .more-dropup-menu {
+                    position: absolute;
+                    bottom: calc(100% + 10px);
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background-color: #343a40;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    padding: 0.5rem;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                    z-index: 1010;
+                }
+                /* --- END: New Mobile Menu Styles --- */
+
                 @media (max-width: 767.98px) {
                     .controls-container {
                         padding: 0.75rem;
                     }
                     .control-button {
-                        width: 44px;
-                        height: 44px;
-                    }
-                    .main-controls-group {
-                        gap: 0.5rem !important;
-                    }
-                    .share-dropdown-menu {
-                        width: 190px;
+                        width: 48px;
+                        height: 48px;
                     }
                 }
                 `}
             </style>
 
             <div className="controls-container">
-                <div className="w-100 d-flex align-items-center justify-content-center justify-content-md-between">
+                <div className="w-100 d-flex align-items-center justify-content-between">
+                    {/* Left Status Pill (Visible on Desktop) */}
                     <div className="d-none d-md-flex align-items-center" style={{ minWidth: '200px' }}>
-                        {/* The pill is now a motion.div to animate its background */}
                         <motion.div
                             className="d-flex align-items-center gap-3 rounded-pill px-4 py-2 text-white shadow-sm"
                             variants={pillVariants}
@@ -189,92 +287,57 @@ const Controls = ({
                             />
                             <div>
                                 <div className="fw-bold small">{room}</div>
-                                <div className="small text-white-50 text-capitalize">
-                                    {status}
-                                </div>
+                                <div className="small text-white-50 text-capitalize">{status}</div>
                             </div>
                         </motion.div>
                     </div>
 
-                    <div className="d-flex align-items-center justify-content-center main-controls-group" style={{ gap: '1rem' }}>
-                        <motion.button
-                            onClick={() => performAction(ControlActionTypes.mute)}
-                            aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
-                            className={`control-button ${isMuted ? 'active-toggle' : ''}`}
-                        >
-                            {isMuted ? <FiMicOff size={20} /> : <FiMic size={20} />}
-                        </motion.button>
-                        <motion.button
-                            onClick={() => performAction(ControlActionTypes.camera)}
-                            aria-label={isCameraOff ? "Turn camera on" : "Turn camera off"}
-                            className={`control-button ${isCameraOff ? 'active-toggle' : ''}`}
-                        >
-                            {isCameraOff ? <FiVideoOff size={20} /> : <FiVideo size={20} />}
-                        </motion.button>
-                        <motion.button
-                            onClick={() => performAction("record")}
-                            aria-label={isRecording ? "Stop recording" : "Start recording"}
-                            className={`control-button ${isRecording ? 'hang-up' : ''}`} // Re-use hang-up style for red color
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                        >
-                            <FiDisc size={20} />
-                        </motion.button>
+                    {/* --- START: Center Controls --- */}
+                    {/* Desktop View: Full controls visible */}
+                    <div className="d-none d-md-flex align-items-center justify-content-center" style={{ gap: '1rem' }}>
+                        <MuteButton />
+                        <CameraButton />
+                        <RecordButton />
+                        <ShareButton />
+                        <EndCallButton />
+                    </div>
+
+                    {/* Mobile View: Minimal controls + "More" menu */}
+                    <div className="d-flex d-md-none align-items-center justify-content-center w-100" style={{ gap: '1rem' }}>
+                        <MuteButton />
                         <div className="position-relative d-flex align-items-center">
-                            <motion.button
-                                onClick={() => {
-                                    if (isSharing) {
-                                        handleShare('none');
-                                    } else {
-                                        setShareMenuOpen(!isShareMenuOpen);
-                                    }
-                                }}
-                                aria-label={isSharing ? "Stop screen sharing" : "Share screen"}
-                                className={`control-button ${isSharing ? 'active-toggle' : ''}`}
+                             <motion.button
+                                onClick={() => setMoreMenuOpen(!isMoreMenuOpen)}
+                                aria-label="More options"
+                                className="control-button"
                             >
-                                <FiShare size={20} />
+                                <FiMoreVertical size={22} />
                             </motion.button>
                             <AnimatePresence>
-                                {isShareMenuOpen && (
+                                {isMoreMenuOpen && (
                                     <motion.div
-                                        className="share-dropdown-menu"
-                                        variants={shareMenuVariants}
+                                        className="more-dropup-menu"
+                                        variants={menuVariants}
                                         initial="hidden"
                                         animate="visible"
                                         exit="hidden"
-                                        onBlur={() => setShareMenuOpen(false)}
-                                        tabIndex={-1}
                                     >
-                                        <div className="share-dropdown-item" onClick={() => handleShare("none")}>
-                                            <PiTelevisionSimpleBold size={18} /> <span className="small">Share Screen Only</span>
-                                        </div>
-                                        <div className="share-dropdown-item" onClick={() => handleShare("mic")}>
-                                            <FiMic size={18} /> <span className="small">Share with Microphone</span>
-                                        </div>
-                                        <div className="share-dropdown-item" onClick={() => handleShare("system")}>
-                                            <BsEarbuds size={18} /> <span className="small">Share with System Audio</span>
-                                        </div>
+                                        {/* Buttons are nested here for mobile */}
+                                        <CameraButton />
+                                        <RecordButton />
+                                        <ShareButton />
+                                        <SidebarButton />
                                     </motion.div>
                                 )}
                             </AnimatePresence>
                         </div>
-                        <motion.button
-                            onClick={() => performAction(ControlActionTypes.end)}
-                            aria-label="End call"
-                            className="control-button hang-up"
-                        >
-                            <FiPhoneOff size={22} />
-                        </motion.button>
+                        <EndCallButton />
                     </div>
+                    {/* --- END: Center Controls --- */}
 
+                    {/* Right Sidebar Button (Visible on Desktop) */}
                     <div className="d-none d-md-flex justify-content-end" style={{ minWidth: '200px' }}>
-                        <motion.button
-                            onClick={() => performAction(ControlActionTypes.sidebar)}
-                            aria-label={isSidebar ? "Hide participants sidebar" : "Show participants sidebar"}
-                            className="control-button"
-                        >
-                            {isSidebar ? <LuPanelRightClose size={22} /> : <LuPanelRight size={22} />}
-                        </motion.button>
+                        <SidebarButton />
                     </div>
                 </div>
             </div>
