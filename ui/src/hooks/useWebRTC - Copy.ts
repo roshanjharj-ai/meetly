@@ -128,7 +128,7 @@ class WebRTCManager {
       // Close websocket
       try {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.close();
-      } catch { }
+      } catch {}
 
       // For each peer: replace senders' tracks with null (so remote stops receiving),
       // then close the RTCPeerConnection.
@@ -142,10 +142,10 @@ class WebRTCManager {
               /* ignore */
             }
           });
-        } catch { }
+        } catch {}
         try {
           pc.close();
-        } catch { }
+        } catch {}
       });
 
       // clear peers and data channels
@@ -158,10 +158,10 @@ class WebRTCManager {
           this.localStream.getTracks().forEach((t) => {
             try {
               t.stop();
-            } catch { }
+            } catch {}
           });
         }
-      } catch { }
+      } catch {}
       this.localStream = null;
 
       // Stop & clear screenStream
@@ -170,10 +170,10 @@ class WebRTCManager {
           this.screenStream.getTracks().forEach((t) => {
             try {
               t.stop();
-            } catch { }
+            } catch {}
           });
         }
-      } catch { }
+      } catch {}
       this.screenStream = null;
 
       // Restore and clear any replaced senders map (if present)
@@ -182,7 +182,7 @@ class WebRTCManager {
           const pc = this.peers[peerId];
           // we already closed pcs above; if you still want to restore, handle it here.
         });
-      } catch { }
+      } catch {}
 
       this.screenSenders = {};
       this.pendingScreen = null;
@@ -191,13 +191,13 @@ class WebRTCManager {
       // UI callbacks
       try {
         this.onUsers?.([]);
-      } catch { }
+      } catch {}
       try {
         this.onSharingBy?.(null);
-      } catch { }
+      } catch {}
       try {
         this.onBotActive?.(false);
-      } catch { }
+      } catch {}
 
       this.log("fullCleanup complete");
     } catch (err) {
@@ -253,7 +253,7 @@ class WebRTCManager {
       await this.ensureLocalStream().catch(() => {
         /* caller may handle if user denies */
       });
-    } catch { }
+    } catch {}
     this.log("Connecting to WS:", this.wsUrl);
     const ws = new WebSocket(this.wsUrl);
     this.ws = ws;
@@ -286,12 +286,12 @@ class WebRTCManager {
     this.log("Manager disconnect");
     try {
       this.ws?.close();
-    } catch { }
+    } catch {}
 
     Object.values(this.peers).forEach((pc) => {
       try {
         pc.close();
-      } catch { }
+      } catch {}
     });
     this.peers = {};
     this.dataChannels = {};
@@ -302,7 +302,7 @@ class WebRTCManager {
         this.localStream.getTracks().forEach((t) => {
           try {
             t.stop();
-          } catch { }
+          } catch {}
         });
       }
     } catch {
@@ -317,7 +317,7 @@ class WebRTCManager {
         this.screenStream.getTracks().forEach((t) => {
           try {
             t.stop();
-          } catch { }
+          } catch {}
         });
       }
     } catch {
@@ -510,7 +510,7 @@ class WebRTCManager {
     this.localStream.getTracks().forEach((t) => {
       try {
         pc.addTrack(t, this.localStream as MediaStream);
-      } catch { }
+      } catch {}
     });
   }
 
@@ -566,7 +566,7 @@ class WebRTCManager {
       if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
         try {
           pc.close();
-        } catch { }
+        } catch {}
         delete this.peers[targetId];
         delete this.dataChannels[targetId];
         delete this.screenSenders[targetId];
@@ -741,7 +741,7 @@ class WebRTCManager {
           try {
             const s = pc.addTrack(screenAudio, displayStream);
             if (s) replaced.push({ sender: s, originalTrack: null });
-          } catch { }
+          } catch {}
         }
 
         // If there was no video sender and screenVideo exists, add it
@@ -749,7 +749,7 @@ class WebRTCManager {
           try {
             const s = pc.addTrack(screenVideo, displayStream);
             if (s) replaced.push({ sender: s, originalTrack: null });
-          } catch { }
+          } catch {}
         }
 
         if (replaced.length) this.screenSenders[peerId] = replaced;
@@ -766,7 +766,7 @@ class WebRTCManager {
             try {
               const s = pc.addTrack(t, displayStream);
               if (s) senders.push({ sender: s, originalTrack: null });
-            } catch { }
+            } catch {}
           });
           if (senders.length) this.screenSenders[peerId] = senders;
         }
@@ -814,7 +814,7 @@ class WebRTCManager {
         this.screenStream.getTracks().forEach((t) => {
           try {
             t.stop();
-          } catch { }
+          } catch {}
         });
         this.screenStream = null;
       }
@@ -933,7 +933,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
                   ctx.resume().then(() => {
                     // const src = ctx.createBufferSource();
                     console.log("Audio context resumed, trying again...");
-                    audio.play().catch(() => { });
+                    audio.play().catch(() => {});
                   });
                 }
               }
@@ -966,7 +966,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     // allow manager to call a "speaking" handler (if you add detection)
     // mgr.onUsersCount = (n) => { /* optional */ };
 
-    // cleanup: don't auto-disconnect here â€” caller will call disconnect when required
+    // cleanup: don't auto-disconnect here — caller will call disconnect when required
     return () => {
       /* no-op */
     };
@@ -1003,16 +1003,16 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
               cancelAnimationFrame(rafIdRef.current);
               rafIdRef.current = null;
             }
-          } catch { }
+          } catch {}
           try {
             micSourceRef.current?.disconnect();
-          } catch { }
+          } catch {}
           try {
             analyserRef.current?.disconnect();
-          } catch { }
+          } catch {}
           try {
             audioCtxRef.current.close();
-          } catch { }
+          } catch {}
           audioCtxRef.current = null;
           analyserRef.current = null;
           micSourceRef.current = null;
@@ -1070,21 +1070,21 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
           cancelAnimationFrame(rafIdRef.current);
           rafIdRef.current = null;
         }
-      } catch { }
+      } catch {}
       try {
         micSourceRef.current?.disconnect();
         micSourceRef.current = null;
-      } catch { }
+      } catch {}
       try {
         analyserRef.current?.disconnect();
         analyserRef.current = null;
-      } catch { }
+      } catch {}
       try {
         if (audioCtxRef.current) {
-          audioCtxRef.current.close().catch(() => { });
+          audioCtxRef.current.close().catch(() => {});
           audioCtxRef.current = null;
         }
-      } catch { }
+      } catch {}
       dataArrayRef.current = null;
     };
   }, [localStream]);
@@ -1094,49 +1094,74 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     mgrRef.current?.sendSpeakingUpdate(speaking);
   }, [speaking]);
 
-  const disconnect = useCallback(async () => {
-    const mgr = mgrRef.current;
-    if (!mgr) return;
+  const disconnect = useCallback(
+    async (cb?: any) => {
+      try {
+        // 1) Proactively stop and release audio analyzer resources (if any)
+        try {
+          if (rafIdRef.current) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+          }
+        } catch {}
+        try {
+          micSourceRef.current?.disconnect();
+          micSourceRef.current = null;
+        } catch {}
+        try {
+          analyserRef.current?.disconnect();
+          analyserRef.current = null;
+        } catch {}
+        try {
+          if (audioCtxRef.current) {
+            await audioCtxRef.current.close().catch(() => {});
+            audioCtxRef.current = null;
+          }
+        } catch (err) {
+          console.warn("Error closing AudioContext during disconnect:", err);
+        }
+        dataArrayRef.current = null;
 
-    // stop analyzer
-    if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
-    rafIdRef.current = null;
+        // 2) Ask manager to disconnect and then do fullCleanup (manager already stops tracks)
+        try {
+          mgrRef.current?.disconnect();
+        } catch (err) {
+          console.warn("mgr.disconnect failed", err);
+        }
+        try {
+          await mgrRef.current?.fullCleanup?.();
+        } catch (err) {
+          console.warn("mgr fullCleanup failed", err);
+        }
 
-    try { micSourceRef.current?.disconnect(); } catch { }
-    try { analyserRef.current?.disconnect(); } catch { }
-    micSourceRef.current = null;
-    analyserRef.current = null;
-    try { await audioCtxRef.current?.close(); } catch { }
-    audioCtxRef.current = null;
+        // 3) Ensure local state cleared and ensure any leftover tracks are stopped
+        try {
+          // extra safety: stop any tracks found on mgrRef.current.localStream (if present)
+          const mgrLocal = mgrRef.current?.localStream;
+          if (mgrLocal) {
+            mgrLocal.getTracks().forEach((t) => {
+              try {
+                t.stop();
+              } catch {}
+            });
+          }
+        } catch {}
 
-    // stop local tracks
-    try {
-      const streams = [localStream, mgr.localStream, mgr.screenStream].filter(Boolean);
-      for (const s of streams) {
-        s!.getTracks().forEach((t) => { try { t.stop(); } catch { } });
+        setLocalStream(null);
+        setIsScreenSharing(false);
+        setUsers([]);
+        setRemoteStreams({});
+        setRemoteScreens({});
+        setPeerStatus({});
+
+        // Wait briefly to ensure any audio resources are fully released
+        await new Promise((res) => setTimeout(res, 150));
+      } catch (err) {
+        console.warn("mgr disconnect failed", err);
       }
-    } catch { }
-
-    // close peers and websocket
-    try { mgr.ws?.close(); } catch { }
-    Object.values(mgr.peers || {}).forEach((pc) => { try { pc.close(); } catch { } });
-    mgr.peers = {};
-    mgr.dataChannels = {};
-    mgr.localStream = null;
-    mgr.screenStream = null;
-
-    // reset UI state
-    setLocalStream(null);
-    setUsers([]);
-    setRemoteStreams({});
-    setRemoteScreens({});
-    setPeerStatus({});
-    setSharingBy(null);
-    setBotActive(false);
-
-    // slight wait to ensure camera/mic fully release before returning
-    await new Promise((r) => setTimeout(r, 200));
-  }, [localStream]);
+    },
+    []
+  );
 
   const startScreenShare = useCallback(async (audioMode: "none" | "mic" | "system" = "none") => {
     await mgrRef.current?.startScreenShare(audioMode);
