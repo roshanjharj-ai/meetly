@@ -1,14 +1,32 @@
-import { Route, Routes } from 'react-router-dom'
-import MeetingWrapper from './components/MeetingWrapper'
-import StartMeeting from './components/StartMeeting'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Home from './components/home/Home';
+import MeetingList from './components/meetingList/MeetingList';
+import ParticipantManager from './components/participant/ParticipantManager';
+import CalendarView from './components/calendar/CalendarView';
+import type { UserAndRoom } from './types/meeting.types';
 
-const PageRouter = () => {
-  return (
-    <Routes>
-      <Route path='/meet/*' element={<MeetingWrapper />} />
-      <Route path='*' element={<StartMeeting />} />
-    </Routes>
-  )
+// The user prop is "drilled" from App -> PageRouter -> Home
+interface PageRouterProps {
+  user: UserAndRoom;
+  onLogout: () => void;
 }
 
-export default PageRouter
+
+export default function PageRouter({ user, onLogout }: PageRouterProps) {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* The Home page is the default route */}
+        <Route path="/" element={<Home user={user} />} />
+
+        {/* Other application pages */}
+        <Route path="/meetings" element={<MeetingList />} />
+        <Route path="/participants" element={<ParticipantManager />} />
+        <Route path="/calendar" element={<CalendarView />} />
+
+        {/* A catch-all route that redirects any unknown URL back to the Home page */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}

@@ -35,12 +35,9 @@ type DataChannelMessage =
   | { type: "chat_message"; payload: ChatMessagePayload };
 
 const socketUrl = import.meta.env.VITE_WEBSOCKET_URL;
-const RECORDER_API_URL = import.meta.env.VITE_RECORDER_API_URL || "http://localhost:8001";
 const DEFAULT_WS = socketUrl;
 
 const DEFAULT_BOT_NAMES = (window as any).__BOT_NAMES__ || ["Jarvis"];
-
-const isRecorderBot = (name: string): boolean => name.startsWith("RecorderBot");
 
 class WebRTCManager {
   room: string;
@@ -54,9 +51,6 @@ class WebRTCManager {
 
   screenStream: MediaStream | null = null;
   screenSenders: Record<string, RTCRtpSender[]> = {};
-
-  // --- FIX: Add missing property to track the current screen sharer ---
-  sharingBy: string | null = null;
 
   creatingPeer: Record<string, boolean> = {};
   pendingScreen: string | null = null;
@@ -149,12 +143,7 @@ class WebRTCManager {
         const otherUsers = list.filter((u) => u !== this.userId);
         for (const peerId of otherUsers) {
           if (!this.peers[peerId] && !this.creatingPeer[peerId]) {
-            if (isRecorderBot(peerId)) {
-              this.log(`Recorder Bot '${peerId}' detected. Passively waiting for its offer.`);
-              continue; // Be passive ONLY to the recorder.
-            }
             const isBot = DEFAULT_BOT_NAMES.includes(peerId);
-            // To maintain consistent initiator, sort lexicographically
             const initiator = isBot || this.userId < peerId;
             this.createPeer(peerId, initiator);
           }
@@ -202,13 +191,6 @@ class WebRTCManager {
       if (obj.type === "content_update") this.onSharedContent?.(obj.payload);
       else if (obj.type === "status_update") this.onPeerStatus?.(peerId, obj.payload);
       else if (obj.type === "chat_message") this.onChat?.(obj.payload);
-      // --- FIX: Handle screen sharing updates from peers ---
-      else if (obj.type === "screen_update") {
-        const sharing = obj.payload.sharing;
-        const sharer = obj.payload.by;
-        this.sharingBy = sharing ? sharer : null;
-        this.onSharingBy?.(this.sharingBy);
-      }
     } catch (err) {
       this.log("datachannel parse error", err);
     }
@@ -225,17 +207,15 @@ class WebRTCManager {
     const pc = new RTCPeerConnection(this.iceConfig);
 
     pc.onicecandidate = e => { if (e.candidate) this.wsSend({ type: "signal", action: "ice", from: this.userId, to: targetId, payload: e.candidate }); };
-    pc.ontrack = evt => {
-      const stream = evt.streams[0];
-      // Differentiate between regular video and screen share.
-      // Screen shares are typically added after initial connection.
-      // A simple heuristic: if a video track is added and someone is known to be sharing, it's the screen.
-      if (evt.track.kind === 'video' && this.sharingBy && this.sharingBy === targetId) {
-        this.onRemoteScreen?.(targetId, stream);
-      } else {
-        this.onRemoteStream?.(targetId, stream);
-      }
-    };
+    // pc.ontrack = evt => {
+    //   //const stream = evt.streams[0];
+    //   // Differentiate between regular video and screen share based on who initiated the share
+    //   // if (evt.track.kind === 'video' && this.sharingBy && this.sharingBy !== this.userId) {
+    //   //     this.onRemoteScreen?.(this.sharingBy, stream);
+    //   // } else {
+    //   //     this.onRemoteStream?.(targetId, stream);
+    //   // }
+    // };
     pc.onconnectionstatechange = () => {
       if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
         this.onRemoteStream?.(targetId, null);
@@ -289,9 +269,16 @@ class WebRTCManager {
           if (sender) senders.push(sender);
         });
         if (senders.length) this.screenSenders[peerId] = senders;
+
+        // --- FIX: Renegotiate connection after adding tracks ---
+        if (pc.signalingState === 'stable') {
+          pc.createOffer()
+            .then(offer => pc.setLocalDescription(offer))
+            .then(() => this.wsSend({ type: "signal", action: "offer", from: this.userId, to: peerId, payload: pc.localDescription }))
+            .catch(e => this.log("Screen share renegotiation error:", e));
+        }
       });
 
-      this.sharingBy = this.userId;
       this.onSharingBy?.(this.userId);
       this.broadcastDataChannel({ type: "screen_update", payload: { sharing: true, by: this.userId } });
       displayStream.getTracks().forEach((track: any) => { track.onended = () => this.stopScreenShare(); });
@@ -310,10 +297,16 @@ class WebRTCManager {
       const pc = this.peers[peerId];
       if (pc) {
         senders.forEach(sender => pc.removeTrack(sender));
+        // Renegotiate after removing tracks
+        if (pc.signalingState === 'stable') {
+          pc.createOffer()
+            .then(offer => pc.setLocalDescription(offer))
+            .then(() => this.wsSend({ type: "signal", action: "offer", from: this.userId, to: peerId, payload: pc.localDescription }))
+            .catch(e => this.log("Screen share stop renegotiation error:", e));
+        }
       }
     });
     this.screenSenders = {};
-    this.sharingBy = null;
     this.onSharingBy?.(null);
     this.broadcastDataChannel({ type: "screen_update", payload: { sharing: false, by: this.userId } });
   }
@@ -349,7 +342,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const [sharedContent, setSharedContent] = useState<string>("");
   const [speaking, setSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isRecordingLoading, setIsRecordingLoading] = useState(false);
   const [speakers, setSpeakers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -359,31 +351,10 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     const mgr = mgrRef.current;
 
     mgr.onUsers = setUsers;
-    // --- FIX: Robustly handle adding/removing streams from state ---
-    mgr.onRemoteStream = (peerId, stream) => {
-      setRemoteStreams(prev => {
-        const newState = { ...prev };
-        if (stream) {
-          newState[peerId] = stream;
-        } else {
-          delete newState[peerId];
-        }
-        return newState;
-      });
-    };
-    mgr.onRemoteScreen = (peerId, stream) => {
-      setRemoteScreens(prev => {
-        const newState = { ...prev };
-        if (stream) {
-          newState[peerId] = stream;
-        } else {
-          delete newState[peerId];
-        }
-        return newState;
-      });
-    };
+    mgr.onRemoteStream = (peerId, stream) => setRemoteStreams(prev => ({ ...prev, [peerId]: stream } as Record<string, MediaStream>));
     mgr.onRecordingUpdate = setIsRecording;
     mgr.onSpeakerUpdate = setSpeakers;
+    mgr.onRemoteScreen = (peerId, stream) => setRemoteScreens((prev) => ({ ...prev, [peerId]: stream } as Record<string, MediaStream>));
     mgr.onSharingBy = setSharingBy;
     mgr.onPeerStatus = (peerId, st) => setPeerStatus((p) => ({ ...p, [peerId]: st }));
     mgr.onSharedContent = setSharedContent;
@@ -413,47 +384,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       if (mgrRef.current) { mgrRef.current.disconnect(); mgrRef.current = null; }
     };
   }, [room, userId, signalingBase]);
-
-  const startRecording = useCallback(async () => {
-    setIsRecordingLoading(true);
-    try {
-      const response = await fetch(`${RECORDER_API_URL}/start-recording`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room_id: room }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to start recording');
-      }
-      // The WebSocket 'recording_update' message will set isRecording to true
-    } catch (error) {
-      console.error("Error starting recording:", error);
-      // Optionally show an error to the user
-    } finally {
-      setIsRecordingLoading(false);
-    }
-  }, [room]);
-
-  const stopRecording = useCallback(async () => {
-    setIsRecordingLoading(true);
-    try {
-      const response = await fetch(`${RECORDER_API_URL}/stop-recording`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ room_id: room }),
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to stop recording');
-      }
-      // The WebSocket 'recording_update' message will set isRecording to false
-    } catch (error) {
-      console.error("Error stopping recording:", error);
-    } finally {
-      setIsRecordingLoading(false);
-    }
-  }, [room]);
 
   const connect = useCallback(async (audioOnly = false) => {
     if (!mgrRef.current) return;
@@ -506,14 +436,14 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const disconnect = useCallback(() => mgrRef.current?.disconnect(), []);
   const startScreenShare = useCallback(async (audioMode: "none" | "mic" | "system" = "none") => { await mgrRef.current?.startScreenShare(audioMode); setIsScreenSharing(true); }, []);
   const stopScreenShare = useCallback(() => { mgrRef.current?.stopScreenShare(); setIsScreenSharing(false); }, []);
-  // const startRecording = useCallback(() => mgrRef.current?.startRecording(), []);
-  // const stopRecording = useCallback(() => mgrRef.current?.stopRecording(), []);
+  const startRecording = useCallback(() => mgrRef.current?.startRecording(), []);
+  const stopRecording = useCallback(() => mgrRef.current?.stopRecording(), []);
   const sendContentUpdate = useCallback((content: string) => mgrRef.current?.sendContentUpdate(content), []);
   const broadcastStatus = useCallback((status: PeerStatus) => { mgrRef.current?.broadcastStatus(status); setPeerStatus((prev) => ({ ...prev, [userId]: status })); }, [userId]);
   const sendChatMessage = useCallback((msg: ChatMessagePayload) => { mgrRef.current?.sendChatMessage(msg); setChatMessages((prev) => [...prev, msg]); }, []);
   const getLocalStream = useCallback(() => mgrRef.current?.localStream ?? null, []);
 
   return {
-    connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, sendContentUpdate, peerStatus, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botActive, botSpeaker, sharedContent, speaking, startRecording, stopRecording, isRecording, speakers, isRecordingLoading
+    connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, sendContentUpdate, peerStatus, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botActive, botSpeaker, sharedContent, speaking, startRecording, stopRecording, isRecording, speakers,
   };
 }

@@ -1,14 +1,14 @@
 import { createContext, useState, type ReactNode } from "react";
-import type { UserAndRoom } from "../types";
+import type { UserAndRoom } from "../types/meeting.types";
 
 interface UserContextType {
-    user: UserAndRoom,
-    setUser: (user: UserAndRoom) => void
+    user: UserAndRoom | null,
+    setUser: (user: UserAndRoom | null) => void
 }
 
 
 export const UserContext = createContext<UserContextType>({
-    user: { room: "", user: "" }, setUser: () => { }
+    user: { email: "", room: "", user: "" }, setUser: () => { }
 })
 
 interface UserContextProviderRequest {
@@ -16,7 +16,8 @@ interface UserContextProviderRequest {
 }
 
 export const UserContextProvider = ({ children }: UserContextProviderRequest) => {
-    const [user, setUser] = useState<UserAndRoom>({
+    const [user, setUser] = useState<UserAndRoom | null>({
+        email: "",
         room: "",
         user: ""
     })
