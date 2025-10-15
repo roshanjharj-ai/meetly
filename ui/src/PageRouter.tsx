@@ -1,8 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import CalendarView from './components/calendar/CalendarView';
 import Home from './components/home/Home';
 import MeetingList from './components/meetingList/MeetingList';
 import ParticipantManager from './components/participant/ParticipantManager';
-import CalendarView from './components/calendar/CalendarView';
 import type { UserAndRoom } from './types/meeting.types';
 
 // The user prop is "drilled" from App -> PageRouter -> Home
@@ -12,7 +12,7 @@ interface PageRouterProps {
 }
 
 
-export default function PageRouter({ user, onLogout }: PageRouterProps) {
+export default function PageRouter({ user }: PageRouterProps) {
   return (
     <BrowserRouter>
       <Routes>

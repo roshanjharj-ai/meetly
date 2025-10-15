@@ -1,18 +1,18 @@
-import { useContext, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useContext } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 // Import the new MainLayout component
 import MainLayout from './components/MainLayout';
 
 // Import all your page components
+import CalendarView from './components/calendar/CalendarView';
 import Home from './components/home/Home';
+import JoinMeeting from './components/meeting/JoinMeeting';
+import MeetingWrapper from './components/meeting/MeetingWrapper';
+import StartMeeting from './components/meeting/StartMeeting';
 import MeetingList from './components/meetingList/MeetingList';
 import ParticipantManager from './components/participant/ParticipantManager';
-import CalendarView from './components/calendar/CalendarView';
-import StartMeeting from './components/meeting/StartMeeting';
-import MeetingWrapper from './components/meeting/MeetingWrapper';
 import { UserContext } from './context/UserContext';
-import JoinMeeting from './components/meeting/JoinMeeting';
 
 export default function App() {
   const userContext = useContext(UserContext);
