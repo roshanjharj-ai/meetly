@@ -13,6 +13,7 @@ import StartMeeting from './components/meeting/StartMeeting';
 import MeetingList from './components/meetingList/MeetingList';
 import ParticipantManager from './components/participant/ParticipantManager';
 import { UserContext } from './context/UserContext';
+import "./App.css";
 
 export default function App() {
   const userContext = useContext(UserContext);
