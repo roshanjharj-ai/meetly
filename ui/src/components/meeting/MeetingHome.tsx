@@ -118,7 +118,7 @@ export default function MeetingHome() {
 
     return (
         <div className="d-flex flex-column h-100 position-relative bg-dark text-white" data-bs-theme="dark">
-            <main className="d-flex overflow-hidden" style={{ height: "calc(100vh - 90px)" }}>
+            <main className="d-flex overflow-hidden" style={{ height: "calc(100% - 91px)" }}>
                 <div className="flex-grow-1 h-100 d-flex align-items-center justify-content-center p-2 p-md-3">
                     {activeStream ? (
                         <motion.div className="w-100 h-100 bg-black rounded-3 overflow-hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -140,7 +140,7 @@ export default function MeetingHome() {
                     </AnimatePresence>
                 )}
             </main>
-            <footer>
+            <footer className='border-top border-secondary flex-shrink-0' style={{ height: 90 }}>
                 <Controls isRecordingLoading={isRecordingLoading} isSidebar={isSidebarOpen} performAction={performAction} status={isJoined ? "Connected" : "Connecting"} room={userContext.user == null ? "rr" : userContext.user?.room} isMuted={isMuted} isCameraOff={isCameraOff} isSharing={isScreenSharing} isSpeaking={speaking} isJoined={isJoined} isRecording={isRecording} />
             </footer>
             {isMobile && (

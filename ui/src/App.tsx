@@ -26,7 +26,7 @@ export default function App() {
   };
 
   // If the user is logged out, the router will redirect them to the /login page
-  if (!userContext.user) {
+  if (userContext.user == null || userContext.user?.user === '') {
     return (
       <div className="bg-dark text-white vh-100" data-bs-theme="dark">
         <BrowserRouter>

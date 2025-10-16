@@ -26,7 +26,7 @@ export default function JoinMeeting() {
     };
 
     return (
-        <div className="container d-flex align-items-center justify-content-center" style={{ minHeight: 'calc(100vh - 60px)' }}>
+        <div className="container d-flex align-items-center justify-content-center" style={{ minHeight: 'calc(100h - 60px)' }}>
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
