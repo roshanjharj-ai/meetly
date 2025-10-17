@@ -1,28 +1,99 @@
-# signaling_server.py
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+# main.py
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+from datetime import timedelta
+from typing import List, Dict, Any
 import json
 import os
-from typing import Dict, Any
+
+# --- CORRECTED IMPORTS ---
+# All modules (crud, models, auth, etc.) are in the same directory,
+# so we import them directly without the leading dot.
+import crud
+import models
+import schemas
+import auth
+from database import engine, get_db
+
+# This line creates the database tables based on the models defined in models.py
+models.Base.metadata.create_all(bind=engine)
 
 # --- Configuration ---
-# Using a prefix is more robust for identifying the recorder bot
 RECORDER_BOT_PREFIX = os.getenv("RECORDER_BOT_PREFIX", "RecorderBot")
 
 # --- Application Setup ---
-app = FastAPI(title="Unified WebRTC Signaling Server")
+app = FastAPI(title="Unified Meeting Server")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all for development
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Use the detailed state structure that supports all your bots
+# In-memory state for WebSocket rooms
 rooms: Dict[str, Dict[str, Any]] = {}
 
-# --- WebSocket Logic ---
+# === API Routes ===
+
+# --- Auth Routes ---
+@app.post("/api/token", response_model=schemas.Token)
+async def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+    user = crud.get_user_by_email(db, email=form_data.username)
+    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth.create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/api/signup", response_model=schemas.User)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.create_user(db=db, user=user)
+
+@app.post("/api/auth/google", response_model=schemas.Token)
+async def auth_google(token_request: dict, db: Session = Depends(get_db)):
+    google_token = token_request.get("token")
+    if not google_token:
+        raise HTTPException(status_code=400, detail="Google token not provided")
+    return await auth.verify_google_token(google_token, db)
+
+@app.get("/api/users/me", response_model=schemas.User)
+async def read_users_me(current_user: schemas.User = Depends(auth.get_current_user)):
+    return current_user
+
+@app.put("/api/users/me", response_model=schemas.User)
+async def update_user_profile(
+    update_data: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    return crud.update_user(db=db, user=current_user, update_data=update_data)
+
+# --- Meeting & Participant Routes (Protected) ---
+@app.get("/api/getMeetings", response_model=List[schemas.Meeting])
+def get_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
+    return crud.get_meetings(db, skip=skip, limit=limit)
+
+@app.post("/api/createMeeting", response_model=schemas.Meeting)
+def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
+    return crud.create_meeting(db=db, meeting=meeting)
+
+@app.get("/api/getParticipants", response_model=List[schemas.Participant])
+def get_participants(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
+    return crud.get_participants(db, skip=skip, limit=limit)
+
+# === WebSocket Logic ===
 @app.websocket("/ws/{room_id}/{user_id}")
 async def signaling(websocket: WebSocket, room_id: str, user_id: str):
     await websocket.accept()
@@ -34,7 +105,6 @@ async def signaling(websocket: WebSocket, room_id: str, user_id: str):
     rooms[room_id]["users"][user_id] = {"ws": websocket, "speaking": False}
     await broadcast_user_list(room_id)
     
-    # Notify the new user if a recording is already in progress
     if rooms[room_id].get("is_recording"):
         await safe_send(websocket, {"type": "recording_update", "is_recording": True})
 
@@ -46,35 +116,28 @@ async def signaling(websocket: WebSocket, room_id: str, user_id: str):
             
             target_id = msg.get("to")
             if target_id:
-                # This is a direct message (offer, answer, ice). Forward it reliably.
                 target_user_info = rooms.get(room_id, {}).get("users", {}).get(target_id)
                 if target_user_info:
                     await safe_send(target_user_info["ws"], msg)
             else:
-                # This is a broadcast-style message. Handle based on type.
                 if msg_type == "speaking_update":
                     is_speaking = msg.get("payload", {}).get("speaking", False)
                     if user_id in rooms.get(room_id, {}).get("users", {}):
                         rooms[room_id]["users"][user_id]["speaking"] = is_speaking
                         all_speakers = {uid: uinfo["speaking"] for uid, uinfo in rooms[room_id]["users"].items()}
                         await broadcast(room_id, {"type": "speaker_update", "speakers": all_speakers})
-                
                 elif msg_type == "recording_update":
                     rooms[room_id]["is_recording"] = msg.get("is_recording", False)
                     await broadcast(room_id, msg)
-                
                 else:
                     await broadcast(room_id, msg, sender_id=user_id)
 
     except WebSocketDisconnect:
         print(f"[Server] 🔌 '{user_id}' disconnected from room '{room_id}'")
     finally:
-        # --- DEFINITIVE FIX FOR STALE STATE ---
-        # Cleanly remove the user and check if it was the recorder bot.
         if room_id in rooms and user_id in rooms[room_id]["users"]:
             del rooms[room_id]["users"][user_id]
             
-            # If the disconnected user was the recorder, reset the flag and notify everyone.
             if user_id.startswith(RECORDER_BOT_PREFIX):
                 print(f"[Server] 🔴 Recorder Bot disconnected. Resetting recording status for room '{room_id}'.")
                 rooms[room_id]["is_recording"] = False
@@ -86,7 +149,7 @@ async def signaling(websocket: WebSocket, room_id: str, user_id: str):
             else:
                 await broadcast_user_list(room_id)
 
-# --- Helper Functions (Unchanged) ---
+# --- Helper Functions ---
 async def broadcast_user_list(room_id: str):
     if room_id in rooms:
         user_list = list(rooms[room_id]["users"].keys())
