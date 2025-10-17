@@ -33,8 +33,17 @@ export interface UpdateParticipantResponse extends Participant { }
 export type UserAndRoom = {
     email: string;
     password?: string;
-    user: string,
-    room: string
+    user_name: string,
+    full_name?: string;
+    mobile?: string;
+    picture?: string;
+}
+
+export interface FullUserProfile extends UserAndRoom {
+  full_name?: string;
+  mobile?: string;
+  photo_url?: string;
+  // Add any other fields that your backend's User schema provides
 }
 
 export const ControlActionTypes = {

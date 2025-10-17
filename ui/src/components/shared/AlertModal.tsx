@@ -21,7 +21,7 @@ export default function AlertModal({ isOpen, onClose, onConfirm, title, message 
         >
           <motion.div
             initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }}
-            className="bg-dark border border-secondary rounded-3 shadow-lg p-4"
+            className="border border-secondary rounded-3 shadow-lg p-4"
             style={{ minWidth: '300px', maxWidth: '500px' }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -31,7 +31,7 @@ export default function AlertModal({ isOpen, onClose, onConfirm, title, message 
               </h5>
               <button type="button" className="btn-close" onClick={onClose}></button>
             </div>
-            <p className="text-muted">{message}</p>
+            <p className="text-body-secondary">{message}</p>
             <div className="d-flex justify-content-end gap-2 mt-4">
               <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
               <button className="btn btn-danger" onClick={() => { onConfirm(); onClose(); }}>Confirm</button>

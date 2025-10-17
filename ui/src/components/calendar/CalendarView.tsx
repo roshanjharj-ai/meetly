@@ -9,8 +9,8 @@ export default function CalendarView() {
             </button>
         </div> */}
         <div className="d-flex flex-column align-items-center justify-content-center flex-grow-1">
-            <FiCalendar size={60} className="text-muted mb-3" />
-            <h2 className="text-muted">Calendar View</h2>
+            <FiCalendar size={60} className="text-body-secondary mb-3" />
+            <h2 className="text-body-secondary">Calendar View</h2>
             <p className="text-center">
                 This is where a full calendar component (e.g., FullCalendar, react-big-calendar) would be integrated <br /> to display all your meetings visually.
             </p>

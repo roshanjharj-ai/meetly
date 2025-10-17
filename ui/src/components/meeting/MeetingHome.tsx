@@ -2,15 +2,16 @@ import DOMPurify from 'dompurify';
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { FaTimes } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ChatPanel from "../../components/ChatPanel";
-import Controls from "./Controls";
-import UserGrid from "./UserGrid";
-import UserList from "./UserList";
 import { UserContext } from "../../context/UserContext";
+import useMediaQuery from '../../hooks/useMediaQuery';
 import { useWebRTC } from "../../hooks/useWebRTC";
 import { ControlActionTypes } from "../../types/meeting.types";
-import useMediaQuery from '../../hooks/useMediaQuery';
+import UserGrid from "./UserGrid";
+import UserList from "./UserList";
+import MeetingFooter from './MeetingFooter';
+
 
 const SidebarContent = React.memo(({
     isMobile, activeSidebarTab, setActiveSidebarTab, setIsSidebarOpen,
@@ -20,10 +21,10 @@ const SidebarContent = React.memo(({
         <div className="d-flex flex-column h-100 w-100">
             <div className="p-2 d-flex align-items-center justify-content-between border-bottom border-secondary flex-shrink-0">
                 <ul className="nav nav-pills">
-                    <li className="nav-item"><button className={`nav-link text-white ${activeSidebarTab === "participants" && "active"}`} onClick={() => setActiveSidebarTab("participants")}>Participants</button></li>
-                    <li className="nav-item"><button className={`nav-link text-white ${activeSidebarTab === "chat" && "active"}`} onClick={() => setActiveSidebarTab("chat")}>Chat</button></li>
+                    <li className="nav-item"><button className={`nav-link  ${activeSidebarTab === "participants" && "active"}`} onClick={() => setActiveSidebarTab("participants")}>Participants</button></li>
+                    <li className="nav-item"><button className={`nav-link  ${activeSidebarTab === "chat" && "active"}`} onClick={() => setActiveSidebarTab("chat")}>Chat</button></li>
                 </ul>
-                {isMobile && <button className="btn btn-close text-white" onClick={() => setIsSidebarOpen(false)}><FaTimes /></button>}
+                {isMobile && <button className="btn btn-close " onClick={() => setIsSidebarOpen(false)}><FaTimes /></button>}
             </div>
             <div className="flex-grow-1 overflow-auto p-2">
                 {activeSidebarTab === "participants" ? (
@@ -41,6 +42,14 @@ export default function MeetingHome() {
     const userContext = useContext(UserContext);
     const navigate = useNavigate();
     const isMobile = useMediaQuery("(max-width: 768px)");
+    const [room, setRoom] = useState("");
+    const [searchParam] = useSearchParams();
+
+    useEffect(() => {
+        const r = searchParam.get("room");
+        if (r != null) setRoom(r);
+    }, [searchParam]);
+
 
     const [isJoined, setIsJoined] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
@@ -48,7 +57,8 @@ export default function MeetingHome() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
     const [activeSidebarTab, setActiveSidebarTab] = useState<"participants" | "chat">("participants");
 
-    const { connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botSpeaker, peerStatus, sharedContent, speaking, isRecording, startRecording, stopRecording, speakers, isRecordingLoading } = useWebRTC(userContext.user == null ? "dummy" : userContext.user?.room, (userContext.user == null) ? "aa" : userContext.user?.user);
+    const { connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botSpeaker, peerStatus, sharedContent, speaking, isRecording, startRecording, stopRecording, speakers, isRecordingLoading, meetingProgress } =
+        useWebRTC(userContext.user == null ? "dummy" : room, (userContext.user == null) ? "aa" : userContext.user?.user_name);
 
     useEffect(() => {
         const start = async () => {
@@ -100,24 +110,24 @@ export default function MeetingHome() {
 
     const userList = useMemo(() => {
         if (userContext.user == null) return [];
-        const local = { id: userContext.user?.user, isMuted, isCameraOff, isLocal: true, speaking: speakers[userContext.user?.user] ?? false, };
-        const remotes = users.filter(u => u !== userContext.user?.user).map(id => ({ id, isMuted: peerStatus[id]?.isMuted ?? false, isCameraOff: peerStatus[id]?.isCameraOff ?? false, isLocal: false, speaking: speakers[id] ?? false, }));
+        const local = { id: userContext.user.user_name, isMuted, isCameraOff, isLocal: true, speaking: speakers[userContext.user.user_name] ?? false, };
+        const remotes = users.filter(u => u !== userContext.user?.user_name).map(id => ({ id, isMuted: peerStatus[id]?.isMuted ?? false, isCameraOff: peerStatus[id]?.isCameraOff ?? false, isLocal: false, speaking: speakers[id] ?? false, }));
         return [local, ...remotes].sort((a, b) => a.id.localeCompare(b.id));
-    }, [userContext.user?.user, users, isMuted, isCameraOff, speakers, peerStatus]);
+    }, [userContext.user?.user_name, users, isMuted, isCameraOff, speakers, peerStatus]);
 
     const userGridList = useMemo(() => {
         if (userContext.user == null) return [];
-        const local = { id: userContext.user?.user, stream: getLocalStream() || undefined, isMuted, isCameraOff, isLocal: true, speaking: speakers[userContext.user?.user] ?? false };
-        const remotes = users.filter(u => u !== userContext.user?.user).map(id => ({ id, stream: remoteStreams[id], isMuted: peerStatus[id]?.isMuted ?? false, isCameraOff: peerStatus[id]?.isCameraOff ?? false, isLocal: false, speaking: speakers[id] ?? false }));
+        const local = { id: userContext.user?.user_name, stream: getLocalStream() || undefined, isMuted, isCameraOff, isLocal: true, speaking: speakers[userContext.user?.user_name] ?? false };
+        const remotes = users.filter(u => u !== userContext.user?.user_name).map(id => ({ id, stream: remoteStreams[id], isMuted: peerStatus[id]?.isMuted ?? false, isCameraOff: peerStatus[id]?.isCameraOff ?? false, isLocal: false, speaking: speakers[id] ?? false }));
         return [local, ...remotes].sort((a, b) => a.id.localeCompare(b.id));
-    }, [userContext.user?.user, users, getLocalStream, remoteStreams, isMuted, isCameraOff, speakers, peerStatus]);
+    }, [userContext.user?.user_name, users, getLocalStream, remoteStreams, isMuted, isCameraOff, speakers, peerStatus]);
 
     const shareRef = useRef<HTMLVideoElement | null>(null);
     const activeStream = sharingBy ? remoteScreens[sharingBy] : null;
     useEffect(() => { if (shareRef.current) { shareRef.current.srcObject = activeStream; } }, [activeStream]);
 
     return (
-        <div className="d-flex flex-column h-100 position-relative bg-dark text-white" data-bs-theme="dark">
+        <div className="d-flex flex-column h-100 position-relative bg-body " data-bs-theme={userContext.theme}>
             <main className="d-flex overflow-hidden" style={{ height: "calc(100% - 91px)" }}>
                 <div className="flex-grow-1 h-100 d-flex align-items-center justify-content-center p-2 p-md-3">
                     {activeStream ? (
@@ -133,21 +143,34 @@ export default function MeetingHome() {
                 {!isMobile && (
                     <AnimatePresence>
                         {isSidebarOpen && (
-                            <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ type: 'tween', duration: 0.3 }} className="bg-dark h-100 border-start border-secondary flex-shrink-0" style={{ overflow: 'hidden' }}>
-                                <SidebarContent isMobile={isMobile} activeSidebarTab={activeSidebarTab} setActiveSidebarTab={setActiveSidebarTab} setIsSidebarOpen={setIsSidebarOpen} userList={userList} botSpeaker={botSpeaker} sharingBy={sharingBy} chatMessages={chatMessages} sendChatMessage={sendChatMessage} localUserId={userContext.user?.user} />
+                            <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ type: 'tween', duration: 0.3 }} className="bg-body h-100 border-start border-secondary flex-shrink-0" style={{ overflow: 'hidden' }}>
+                                <SidebarContent isMobile={isMobile} activeSidebarTab={activeSidebarTab} setActiveSidebarTab={setActiveSidebarTab} setIsSidebarOpen={setIsSidebarOpen} userList={userList} botSpeaker={botSpeaker} sharingBy={sharingBy} chatMessages={chatMessages} sendChatMessage={sendChatMessage} localUserId={userContext.user?.user_name} />
                             </motion.aside>
                         )}
                     </AnimatePresence>
                 )}
             </main>
             <footer className='border-top border-secondary flex-shrink-0' style={{ height: 90 }}>
-                <Controls isRecordingLoading={isRecordingLoading} isSidebar={isSidebarOpen} performAction={performAction} status={isJoined ? "Connected" : "Connecting"} room={userContext.user == null ? "rr" : userContext.user?.room} isMuted={isMuted} isCameraOff={isCameraOff} isSharing={isScreenSharing} isSpeaking={speaking} isJoined={isJoined} isRecording={isRecording} />
+                <MeetingFooter
+                    isRecordingLoading={isRecordingLoading}
+                    isSidebar={isSidebarOpen}
+                    performAction={performAction}
+                    status={isJoined ? "Connected" : "Connecting"}
+                    room={room || "rr"}
+                    isMuted={isMuted}
+                    isCameraOff={isCameraOff}
+                    isSharing={isScreenSharing}
+                    isSpeaking={speaking}
+                    isJoined={isJoined}
+                    isRecording={isRecording}
+                    meetingProgress={meetingProgress}
+                />
             </footer>
             {isMobile && (
                 <AnimatePresence>
                     {isSidebarOpen && (
-                        <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: 'tween', duration: 0.3 }} className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column bg-dark" style={{ zIndex: 2000 }}>
-                            <SidebarContent isMobile={isMobile} activeSidebarTab={activeSidebarTab} setActiveSidebarTab={setActiveSidebarTab} setIsSidebarOpen={setIsSidebarOpen} userList={userList} botSpeaker={botSpeaker} sharingBy={sharingBy} chatMessages={chatMessages} sendChatMessage={sendChatMessage} localUserId={userContext.user?.user} />
+                        <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: 'tween', duration: 0.3 }} className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column bg-body" style={{ zIndex: 2000 }}>
+                            <SidebarContent isMobile={isMobile} activeSidebarTab={activeSidebarTab} setActiveSidebarTab={setActiveSidebarTab} setIsSidebarOpen={setIsSidebarOpen} userList={userList} botSpeaker={botSpeaker} sharingBy={sharingBy} chatMessages={chatMessages} sendChatMessage={sendChatMessage} localUserId={userContext.user?.user_name} />
                         </motion.div>
                     )}
                 </AnimatePresence>

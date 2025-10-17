@@ -83,16 +83,16 @@ export default function UserGrid({ users, excludeUserId = null, className = "", 
             {!u.isCameraOff && u.stream ? (
               <UserVideo stream={u.stream} isLocal={!!u.isLocal} />
             ) : (
-              <div className="flex-grow-1 d-flex align-items-center justify-content-center text-white fw-bold">
+              <div className="flex-grow-1 d-flex align-items-center justify-content-center fw-bold">
                 <div style={{ fontSize: "clamp(2rem, 10vw, 4rem)" }}>
-                  {u.id.charAt(0).toUpperCase()}
+                  {u.id?.charAt(0).toUpperCase()}
                 </div>
               </div>
             )}
             <div className="position-absolute start-0 end-0 bottom-0 p-2 d-flex justify-content-between align-items-center"
                  style={{ background: "linear-gradient(to top, rgba(0,0,0,0.6), transparent)" }}
             >
-              <div className="text-white fw-bold small shadow-sm" style={{ textShadow: "1px 1px 3px #000" }}>
+              <div className="fw-bold small shadow-sm" style={{ textShadow: "1px 1px 3px #000" }}>
                 {u.isLocal ? `${u.id} (You)` : u.id}
               </div>
               <div className="d-flex gap-2 align-items-center">

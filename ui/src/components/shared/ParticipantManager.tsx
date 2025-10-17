@@ -91,13 +91,13 @@ export default function ParticipantManager() {
 
       <div className="list-group">
         {participants.length === 0 ? (
-            <p className="text-center text-muted">No participants found. Add one to get started!</p>
+            <p className="text-center text-body-secondary">No participants found. Add one to get started!</p>
         ) : (
             participants.map(p => (
-                <div key={p.id} className="list-group-item list-group-item-action bg-dark text-white d-flex justify-content-between align-items-center">
+                <div key={p.id} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
                     <div>
                         <h5 className="mb-1">{p.name}</h5>
-                        <p className="mb-1 text-muted">{p.email} {p.mobile && `| ${p.mobile}`}</p>
+                        <p className="mb-1 text-body-secondary">{p.email} {p.mobile && `| ${p.mobile}`}</p>
                     </div>
                     <div className="d-flex gap-2">
                         <button className="btn btn-sm btn-outline-secondary" onClick={() => handleEditClick(p)}><FiEdit /></button>

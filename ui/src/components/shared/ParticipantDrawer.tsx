@@ -80,7 +80,7 @@ export default function ParticipantDrawer({ isOpen, onClose, onSave, participant
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: 'tween', duration: 0.3 }}
-            className="position-fixed top-0 end-0 h-100 bg-dark border-start border-secondary d-flex flex-column"
+            className="position-fixed top-0 end-0 h-100 border-start border-secondary d-flex flex-column"
             style={{ width: '450px', maxWidth: '100vw', zIndex: 1050 }}
           >
             <div className="p-3 d-flex justify-content-between align-items-center border-bottom border-secondary">

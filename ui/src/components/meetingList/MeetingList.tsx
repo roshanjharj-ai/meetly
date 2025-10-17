@@ -17,11 +17,11 @@ const ParticipantsPanel = ({ meeting, onClose }: { meeting: Meeting | undefined;
                 <button className="btn btn-close" onClick={onClose}><FiX/></button>
             </div>
             <div className="p-3 overflow-auto">
-                <p className="text-white small">For: <strong>{meeting.subject}</strong></p>
+                <p className="small">For: <strong>{meeting.subject}</strong></p>
                 <ul className="list-unstyled vstack gap-2">
                     {meeting.participants.map(p => (
                         <li key={p.id} className="p-2 rounded bg-secondary bg-opacity-10">
-                            <strong>{p.name}</strong><br /><small className="text-muted">{p.email}</small>
+                            <strong>{p.name}</strong><br /><small className="text-body-secondary">{p.email}</small>
                         </li>
                     ))}
                 </ul>
@@ -116,9 +116,9 @@ export default function MeetingList() {
           <button className="btn btn-primary d-flex align-items-center justify-content-center gap-2" onClick={handleAddClick}><FiPlus /> New Meeting</button>
         </div>
         <div className="vstack gap-3">
-          {meetings.length === 0 ? ( <p className="text-center text-muted mt-5">You have no upcoming meetings.</p> ) : (
+          {meetings.length === 0 ? ( <p className="text-center text-body-secondary mt-5">You have no upcoming meetings.</p> ) : (
             meetings.map(meeting => (
-              <div key={meeting.id} className="card bg-dark border-secondary">
+              <div key={meeting.id} className="card border-secondary">
                 <div className="card-body">
                   <div className="d-flex justify-content-between">
                     <h5 className="card-title text-primary">{meeting.subject}</h5>
@@ -127,12 +127,12 @@ export default function MeetingList() {
                        <button className="btn btn-sm btn-outline-danger" onClick={() => setMeetingToDelete(meeting)}><FiTrash2/></button>
                     </div>
                   </div>
-                  <h6 className="card-subtitle mb-2 text-muted d-flex align-items-center gap-2 small"><FiClock /> {formatDate(meeting.dateTime)}</h6>
+                  <h6 className="card-subtitle mb-2 text-body-secondary d-flex align-items-center gap-2 small"><FiClock /> {formatDate(meeting.dateTime)}</h6>
                   <p className="card-text small">{meeting.agenda}</p>
                   <div className="d-flex align-items-center gap-3">
                       <div className="d-flex">
                           {meeting.participants.slice(0, 3).map(p => <span key={p.id} className="badge rounded-pill bg-secondary me-1">{p.name.split(' ').map(n=>n[0]).join('')}</span>)}
-                          {meeting.participants.length > 3 && <span className="badge rounded-pill bg-dark border border-secondary">+{meeting.participants.length - 3}</span>}
+                          {meeting.participants.length > 3 && <span className="badge rounded-pill border border-secondary">+{meeting.participants.length - 3}</span>}
                       </div>
                       <button className="btn btn-link btn-sm p-0" onClick={() => setActiveParticipantsPanel(meeting.id)}>View All ({meeting.participants.length})</button>
                   </div>
@@ -147,7 +147,7 @@ export default function MeetingList() {
           <motion.aside
             initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
             transition={{ type: 'tween', duration: 0.3 }}
-            className="bg-dark h-100 border-start border-secondary flex-shrink-0 d-flex flex-column"
+            className="h-100 border-start border-secondary flex-shrink-0 d-flex flex-column"
           >
             <ParticipantsPanel meeting={activeMeetingForPanel} onClose={() => setActiveParticipantsPanel(null)} />
           </motion.aside>
@@ -159,7 +159,7 @@ export default function MeetingList() {
                   <motion.div
                       initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
                       transition={{ type: 'tween', duration: 0.3 }}
-                      className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column bg-dark"
+                      className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column"
                       style={{ zIndex: 2000 }}>
                       <ParticipantsPanel meeting={activeMeetingForPanel} onClose={() => setActiveParticipantsPanel(null)} />
                   </motion.div>

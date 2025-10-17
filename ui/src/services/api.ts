@@ -41,6 +41,19 @@ let fallbackMeetings: Meeting[] = [
     }
 ];
 
+export interface UserProfileUpdate {
+  full_name?: string;
+  user_name?: string;
+  mobile?: string;
+  picture?: string;
+}
+
+export const updateUserProfile = async (data: UserProfileUpdate): Promise<any> => {
+    // We assume the user type will be defined elsewhere, e.g., in types.ts
+    const response = await axios.put(`${API_BASE_URL}/users/me`, data);
+    return response.data;
+};
+
 // --- MEETING API ---
 
 export const getMeetings = async (): Promise<Meeting[]> => {

@@ -1,39 +1,48 @@
 import { useContext } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { UserContext } from './context/UserContext';
 
-// Import the new MainLayout component
 import MainLayout from './components/MainLayout';
 
 // Import all your page components
+import "./App.css";
 import CalendarView from './components/calendar/CalendarView';
 import Home from './components/home/Home';
 import JoinMeeting from './components/meeting/JoinMeeting';
-import MeetingWrapper from './components/meeting/MeetingWrapper';
+import Signup from './components/meeting/Signup';
 import StartMeeting from './components/meeting/StartMeeting';
 import MeetingList from './components/meetingList/MeetingList';
 import ParticipantManager from './components/participant/ParticipantManager';
-import { UserContext } from './context/UserContext';
+
 import "./App.css";
+import UserProfile from './components/UserProfile';
+import MeetingHome from './components/meeting/MeetingHome';
 
 export default function App() {
-  const userContext = useContext(UserContext);
+  // Destructure values from the UserContext
+  const { token, user, logout, isLoading, theme } = useContext(UserContext);
 
-  const handleLogin = (loggedInUser: { name: string, email: string, room: string }) => {
-    userContext.setUser({ user: loggedInUser.name, email: loggedInUser.email, room: loggedInUser.room });
-  };
-
-  const handleLogout = () => {
-    userContext.setUser(null);
-  };
-
-  // If the user is logged out, the router will redirect them to the /login page
-  if (userContext.user == null || userContext.user?.user === '') {
+  // While the context is checking for a token, show a loading state
+  if (isLoading) {
     return (
-      <div className="bg-dark text-white vh-100" data-bs-theme="dark">
+      <div className="vh-100 d-flex justify-content-center align-items-center">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Router for Unauthenticated Users ---
+  // If no token is present, only show the login and signup pages
+  if (!token) {
+    return (
+      <div className="vh-100" data-bs-theme={theme}>
         <BrowserRouter>
           <Routes>
-            <Route path="/login" element={<StartMeeting onLogin={handleLogin} />} />
-            {/* Any other path will redirect to login if not authenticated */}
+            <Route path="/login" element={<StartMeeting />} />
+            <Route path="/signup" element={<Signup />} />
+            {/* Any other path redirects to the login page */}
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </BrowserRouter>
@@ -41,28 +50,32 @@ export default function App() {
     );
   }
 
-  // If the user IS logged in, this router is used
+  // --- Router for Authenticated Users ---
+  // If a token exists, show the main application layout and protected routes
   return (
-    <div className="bg-dark text-white vh-100" data-bs-theme="dark">
-      <BrowserRouter>
-        <Routes>
-          {/* A parent route that renders the MainLayout. All nested routes will appear inside the <Outlet /> */}
-          <Route element={<MainLayout onLogout={handleLogout} />}>
-            <Route path="/" element={<Home user={userContext.user} />} /> {/* Home page, now with the top bar */}
-            <Route path="/join" element={<JoinMeeting />} />
-            <Route path="/meetings" element={<MeetingList />} />
-            <Route path="/participants" element={<ParticipantManager />} />
-            <Route path="/calendar" element={<CalendarView />} />
-            <Route path="/meet/*" element={<MeetingWrapper />} />
-          </Route>
+    user != null && (
+      <div className="vh-100" data-bs-theme={theme}>
+        <BrowserRouter>
+          <Routes>
+            {/* All protected routes are children of the MainLayout */}
+            <Route element={<MainLayout onLogout={logout} />}>
+              <Route path="/" element={<Home user={user} />} />
+              <Route path="/join" element={<JoinMeeting />} />
+              <Route path="/meetings" element={<MeetingList />} />
+              <Route path="/participants" element={<ParticipantManager />} />
+              <Route path="/calendar" element={<CalendarView />} />
+              <Route path="/meet/*" element={<MeetingHome />} />
+              <Route path="/profile" element={<UserProfile />} />
+            </Route>
 
-          {/* If a logged-in user tries to go to /login, redirect them to the dashboard */}
-          <Route path="/login" element={<Navigate to="/" replace />} />
+            {/* If a logged-in user tries to access login/signup, redirect to home */}
+            <Route path="/login" element={<Navigate to="/" replace />} />
+            <Route path="/signup" element={<Navigate to="/" replace />} />
 
-          {/* Any other unknown path for a logged-in user will redirect to the dashboard */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </div>
+            {/* Any other unknown path for a logged-in user redirects to home */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </div>)
   );
 }

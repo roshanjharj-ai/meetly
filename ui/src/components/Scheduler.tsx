@@ -1,13 +1,15 @@
 // src/App.tsx
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import MeetingList from './meetingList/MeetingList';
 import ParticipantManager from './participant/ParticipantManager';
 import CalendarView from './calendar/CalendarView';
+import { UserContext } from '../context/UserContext';
 
 type Tab = 'meetings' | 'participants' | 'calendar';
 
 export default function Scheduler() {
   const [activeTab, setActiveTab] = useState<Tab>('meetings');
+  const { theme } = useContext(UserContext);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -19,8 +21,8 @@ export default function Scheduler() {
   };
 
   return (
-    <div className="bg-dark text-white vh-100 d-flex flex-column" data-bs-theme="dark">
-      <nav className="navbar navbar-expand-lg navbar-dark bg-black border-bottom border-secondary">
+    <div className="vh-100 d-flex flex-column" data-bs-theme={theme}>
+      <nav className="navbar navbar-expand-lg navbar-dark bg-body border-bottom border-secondary">
         <div className="container-fluid">
           <a className="navbar-brand" href="#">Meeting Scheduler</a>
           <div className="collapse navbar-collapse">

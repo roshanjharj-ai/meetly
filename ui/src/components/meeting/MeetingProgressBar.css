@@ -1,0 +1,131 @@
+:root {
+  --progress-bg: #495057;
+  --progress-fill: #28a745;
+  --progress-active: #0d6efd;
+  --progress-stuck: #dc3545;
+  --progress-inprogress: #ffc107;
+  --progress-pending: #6c757d;
+  --tooltip-bg: #212529;
+  --tooltip-text: #e9ecef;
+  --tooltip-border: #495057;
+}
+
+[data-bs-theme="light"] {
+  --progress-bg: #e9ecef;
+  --progress-fill: #198754;
+  --progress-active: #0d6efd;
+  --progress-stuck: #dc3545;
+  --progress-inprogress: #fd7e14;
+  --progress-indicator-bg: #495057;
+  --tooltip-bg: #fff;
+  --tooltip-text: #212529;
+  --tooltip-border: #dee2e6;
+}
+
+.progress-bar-container {
+  width: 100%;
+  height: 100%;
+  padding: 0 25px; /* Adds space at the screen edges */
+  display: flex;
+  align-items: center;
+}
+
+.progress-bar-track {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  height: 4px; /* A thinner, more subtle track */
+  background-color: var(--progress-bg);
+  border-radius: 2px;
+}
+
+.progress-bar-fill {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background-color: var(--progress-fill);
+  border-radius: 2px;
+  /* A smoother, more refined animation */
+  transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1); 
+  z-index: 1;
+}
+
+.progress-step {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 20px; height: 20px;
+  top: -8px; /* Center the step on the track */
+  z-index: 2;
+  cursor: pointer; /* Add pointer cursor for better UX */
+}
+
+.step-indicator {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background-color: #343a40; /* Match dark footer background */
+  border: 3px solid var(--progress-pending);
+  transition: all 0.3s ease;
+}
+
+.progress-step.is-done .step-indicator {
+  border-color: var(--progress-fill);
+  background-color: var(--progress-fill);
+}
+
+.progress-step.is-stuck .step-indicator {
+  border-color: var(--progress-stuck);
+  background-color: var(--progress-stuck);
+}
+
+.progress-step.is-active .step-indicator {
+  border-color: var(--progress-active);
+  transform: scale(1.3);
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.3);
+}
+
+/* Add a hover effect for all steps */
+.progress-step:hover .step-indicator {
+  transform: scale(1.4);
+}
+
+.tooltip {
+  visibility: hidden; opacity: 0;
+  position: absolute;
+  bottom: 180%; /* Raise it higher to clear the new position */
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--tooltip-bg);
+  color: var(--tooltip-text);
+  border: 1px solid var(--tooltip-border);
+  font-size: 0.875rem;
+  width: max-content;
+  min-width: 200px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 1050; 
+  pointer-events: none;
+}
+
+.progress-step:hover .tooltip { visibility: visible; opacity: 1; }
+.tooltip-title { font-weight: 600; margin-bottom: 5px; }
+.tooltip-owner { font-size: 0.8rem; opacity: 0.8; margin-bottom: 5px; }
+.tooltip-status { display: flex; align-items: center; font-size: 0.8rem; font-weight: 500; }
+.tooltip-status-icon { margin-right: 6px; font-size: 0.9em; }
+.tooltip-status.status-done { color: var(--progress-fill); }
+.tooltip-status.status-stuck { color: var(--progress-stuck); }
+.tooltip-status.status-inprogress { color: var(--progress-inprogress); }
+.tooltip-status.status-pending { color: var(--progress-pending); }
+
+/* **FIX**: Definitive fix for tooltip clipping at edges */
+.progress-step:first-child .tooltip {
+  left: 100px!important;
+  transform: translateX(0);
+}
+.progress-step:last-child .tooltip {
+  left: auto;
+  right: 0;
+  transform: translateX(0);
+}

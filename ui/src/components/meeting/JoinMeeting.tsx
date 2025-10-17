@@ -22,7 +22,7 @@ export default function JoinMeeting() {
         // Navigate to the meeting room with the provided ID
         //navigate(`/meet/${roomId.trim()}/user`);
         if (userContext.user != null)
-            navigate(`/meet?room=${encodeURIComponent(roomId.trim())}&user=${encodeURIComponent(userContext.user.user)}`);
+            navigate(`/meet?room=${encodeURIComponent(roomId.trim())}&user=${encodeURIComponent(userContext.user.user_name)}`);
     };
 
     return (
@@ -30,13 +30,13 @@ export default function JoinMeeting() {
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="card bg-dark border-secondary text-center"
+                className="card border-secondary text-center"
                 style={{ maxWidth: '450px', width: '100%' }}
             >
                 <div className="card-body p-4 p-md-5">
                     <FiVideo className="display-4 text-primary mx-auto mb-3" />
                     <h3 className="card-title">Join Meeting</h3>
-                    <p className="card-text text-muted mb-4">Enter the Room ID to join an existing meeting.</p>
+                    <p className="card-text mb-4">Enter the Room ID to join an existing meeting.</p>
 
                     <form onSubmit={handleJoin} noValidate>
                         <div className="mb-3">

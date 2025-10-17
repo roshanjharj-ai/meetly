@@ -14,6 +14,8 @@
     "tailwind": "tailwindcss init -p"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@react-oauth/google": "^0.12.2",
     "@ricky0123/vad-web": "^0.0.28",
     "@tailwindcss/vite": "^4.1.13",
     "@types/uuid": "^10.0.0",
@@ -21,15 +23,21 @@
     "bootstrap": "^5.3.8",
     "clsx": "^2.1.1",
     "dompurify": "^3.2.7",
+    "firebase": "^12.4.0",
     "framer-motion": "^12.23.22",
+    "jwt-decode": "^4.0.0",
     "onnxruntime-web": "^1.23.0",
     "react": "^19.1.1",
     "react-bootstrap": "^2.10.10",
     "react-dom": "^19.1.1",
+    "react-dropzone": "^14.3.8",
+    "react-hook-form": "^7.65.0",
     "react-icons": "^5.5.0",
+    "react-image-crop": "^11.0.10",
     "react-router-dom": "^7.9.4",
     "styled-components": "^6.1.19",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

@@ -1,0 +1,64 @@
+/* src/pages/Meeting/MeetingTimer.css */
+
+/* Base styles for both timer versions */
+.timer-icon {
+  color: rgba(255, 255, 255, 0.7); /* A neutral, bright icon color */
+  transition: color 0.5s ease;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.timer-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #fff; /* Always white for max contrast */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Full Desktop Timer */
+.meeting-timer-full {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.meeting-timer-full .timer-text {
+  min-width: 45px;
+  text-align: left;
+}
+.timer-track {
+  flex-grow: 1;
+  height: 5px;
+  /* **FIX**: A dark, semi-transparent track that is visible on any color */
+  background-color: rgba(0, 0, 0, 0.35);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.timer-fill {
+  height: 100%;
+  /* **FIX**: A bright, solid fill that contrasts against the dark track */
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  transition: width 1s linear; /* Creates the smooth "tick" effect */
+}
+
+
+/* Abstract Mobile Timer */
+.meeting-timer-abstract {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.meeting-timer-abstract .timer-text {
+  min-width: auto;
+}
+
+/* Statuses for Both */
+.warning .timer-icon,
+.warning .timer-text {
+  color: #ffc107; /* Bright yellow for warning */
+}
+.over .timer-icon,
+.over .timer-text {
+  color: #ff8a8a; /* Bright red for "over" state */
+  font-weight: 600;
+}

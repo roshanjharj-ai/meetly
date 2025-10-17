@@ -2,6 +2,14 @@
 /* eslint-disable no-console */
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export type MeetingProgress = {
+  tasks: any[];
+  current_task_index: number;
+  state: string;
+  start_time?: string;
+  end_time?: string;
+};
+
 // types
 export type PeerStatus = { isMuted: boolean; isCameraOff: boolean };
 
@@ -62,6 +70,7 @@ class WebRTCManager {
   pendingScreen: string | null = null;
   lastUserList: string[] = [];
 
+  onProgressUpdate?: (p: MeetingProgress) => void;
   onUsers?: (u: string[]) => void;
   onRemoteStream?: (peerId: string, s: MediaStream | null) => void;
   onRemoteScreen?: (peerId: string, s: MediaStream | null) => void;
@@ -167,6 +176,10 @@ class WebRTCManager {
         this.onChat?.(m);
         break;
       case "signal": await this.handleSignal(msg); break;
+      case "progress_update":
+        console.log("Progress update received:", msg.payload);
+        this.onProgressUpdate?.(msg.payload as MeetingProgress);
+        break;
     }
   }
 
@@ -351,6 +364,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const [isRecording, setIsRecording] = useState(false);
   const [isRecordingLoading, setIsRecordingLoading] = useState(false);
   const [speakers, setSpeakers] = useState<Record<string, boolean>>({});
+  const [meetingProgress, setMeetingProgress] = useState<MeetingProgress | null>(null);
 
   useEffect(() => {
     if (!mgrRef.current) {
@@ -387,6 +401,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     mgr.onSharingBy = setSharingBy;
     mgr.onPeerStatus = (peerId, st) => setPeerStatus((p) => ({ ...p, [peerId]: st }));
     mgr.onSharedContent = setSharedContent;
+    mgr.onProgressUpdate = setMeetingProgress;
     mgr.onBotAudio = (data, fmt, speaker) => {
       try {
         setBotSpeaker(speaker || "");
@@ -514,6 +529,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const getLocalStream = useCallback(() => mgrRef.current?.localStream ?? null, []);
 
   return {
-    connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, sendContentUpdate, peerStatus, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botActive, botSpeaker, sharedContent, speaking, startRecording, stopRecording, isRecording, speakers, isRecordingLoading
+    connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, sendContentUpdate, peerStatus, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botActive, botSpeaker, sharedContent, speaking, startRecording, stopRecording, isRecording, speakers, isRecordingLoading, meetingProgress
   };
 }
