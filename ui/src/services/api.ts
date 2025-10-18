@@ -1,12 +1,13 @@
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
-import type { 
-    Meeting, 
-    Participant, 
-    CreateMeetingRequest, 
-    CreateParticipantRequest, 
-    UpdateMeetingRequest, 
-    UpdateParticipantRequest 
+import type {
+    CreateParticipantRequest,
+    Meeting,
+    Participant,
+    // **FIX**: Adjusting the type used here for clarity
+    // CreateParticipantRequest, 
+    // UpdateMeetingRequest, 
+    UpdateParticipantRequest
 } from "../types/meeting.types";
 
 // Get the base URL from the environment variable. Fallback to an empty string if not set.
@@ -59,35 +60,84 @@ export const updateUserProfile = async (data: UserProfileUpdate): Promise<any> =
 export const getMeetings = async (): Promise<Meeting[]> => {
     try {
         const response = await axios.get(`${API_BASE_URL}/getMeetings`);
-        return response.data;
+        return response.data.map((meeting: any) => ({
+            ...meeting,
+            // Ensure participants is an array of Participant objects if backend schema differs
+            participants: meeting.participants || [], 
+            // Ensure dateTime is a string
+            dateTime: meeting.date_time || meeting.dateTime 
+        }));
     } catch (error) {
         console.warn(`API call failed for getMeetings. Falling back to mock data.`, error);
         return JSON.parse(JSON.stringify(fallbackMeetings)); // Return a deep copy
     }
 };
 
-export const createMeeting = async (data: CreateMeetingRequest): Promise<Meeting> => {
+// **FIX**: Modify the type used for creation data to align with the drawer state
+// This interface matches what MeetingDrawer actually constructs
+interface MeetingFormData {
+  subject: string;
+  agenda: string;
+  dateTime: string; // The drawer uses ISO string
+  participants: Participant[]; // The drawer manages full participant objects
+}
+
+export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => {
+    // **FIX**: Transform the frontend data to match the backend schema (snake_case, participant_ids)
+    const payload = {
+        subject: data.subject,
+        agenda: data.agenda,
+        date_time: data.dateTime, // Backend expects snake_case, Pydantic handles string->datetime
+        participant_ids: data.participants.map(p => parseInt(p.id, 10)) // Extract IDs
+    };
+
     try {
-        const response = await axios.post(`${API_BASE_URL}/createMeeting`, data);
-        return response.data;
+        const response = await axios.post(`${API_BASE_URL}/createMeeting`, payload);
+        // Map response back if necessary
+        return {
+            ...response.data,
+            participants: response.data.participants || [],
+            dateTime: response.data.date_time || response.data.dateTime
+        };
     } catch (error) {
         console.warn(`API call failed for createMeeting. Falling back to mock data.`, error);
-        const newMeeting: Meeting = { ...data, id: uuidv4(), meetingLink: `https://meet.example.com/${uuidv4().substring(0, 8)}` };
+        // Use the original 'data' for mock creation, as it contains full participant objects
+        const newMeeting: Meeting = { 
+            ...data, 
+            id: uuidv4(), 
+            meetingLink: `https://meet.example.com/${uuidv4().substring(0, 8)}` 
+        };
         fallbackMeetings.push(newMeeting);
-        return newMeeting;
+        return newMeeting; // Return the fully formed Meeting object
     }
 };
 
-export const updateMeeting = async (data: UpdateMeetingRequest): Promise<Meeting> => {
+
+// **FIX**: UpdateMeeting needs similar transformation logic if used
+// Assuming UpdateMeetingRequest might also come from a similar form state
+export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
+     const payload = {
+        id: data.id, // Assuming ID is part of the data object for update
+        subject: data.subject,
+        agenda: data.agenda,
+        date_time: data.dateTime, 
+        participant_ids: data.participants.map(p => parseInt(p.id, 10)) 
+    };
     try {
-        const response = await axios.put(`${API_BASE_URL}/updateMeeting`, data);
-        return response.data;
+        // Assuming your update endpoint also expects snake_case and participant_ids
+        const response = await axios.put(`${API_BASE_URL}/updateMeeting/${data.id}`, payload); // Assuming PUT to /updateMeeting/{id}
+         return {
+            ...response.data,
+            participants: response.data.participants || [],
+            dateTime: response.data.date_time || response.data.dateTime
+        };
     } catch (error) {
         console.warn(`API call failed for updateMeeting. Falling back to mock data.`, error);
         const index = fallbackMeetings.findIndex(m => m.id === data.id);
         if (index === -1) throw new Error("Mock meeting not found");
-        fallbackMeetings[index] = data;
-        return data;
+        // Update mock data with the structure expected by the UI
+        fallbackMeetings[index] = { ...fallbackMeetings[index], ...data }; 
+        return fallbackMeetings[index];
     }
 };
 

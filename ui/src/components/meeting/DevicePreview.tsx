@@ -1,7 +1,7 @@
 // src/pages/Meeting/DevicePreview.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { FiMic, FiMicOff, FiVideo, FiVideoOff, FiRefreshCw, FiVolume2 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
+import { FiMic, FiMicOff, FiRefreshCw, FiVideo, FiVideoOff } from 'react-icons/fi';
 
 interface DevicePreviewProps {
   initialAudioEnabled: boolean;

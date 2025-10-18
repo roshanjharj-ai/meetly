@@ -1,7 +1,7 @@
 // src/pages/Meeting/MeetingProgressBar.tsx
 import React from 'react';
 import './MeetingProgressBar.css';
-import { type MeetingProgress } from '../../hooks/useWebRTC';
+import { type MeetingProgress } from '../../hooks/webrtc/types';
 import { FaCheckCircle, FaExclamationCircle, FaHourglassHalf, FaCircle } from 'react-icons/fa';
 
 interface Task {

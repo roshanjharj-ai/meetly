@@ -74,8 +74,8 @@ export default function MeetingDrawer({ isOpen, onClose, onSave, meetingToEdit, 
   };
 
   const handleAddParticipant = () => {
-      const participantToAdd = allParticipants.find(p => p.id === selectedParticipantId);
-      if (participantToAdd && !formState.participants.some(p => p.id === participantToAdd.id)) {
+      const participantToAdd = allParticipants.find(p => p.id.toString() === selectedParticipantId.toString());
+      if (participantToAdd && !formState.participants.some(p => p.id.toString() === participantToAdd.id)) {
           setFormState(prev => ({ ...prev, participants: [...prev.participants, participantToAdd] }));
           setSelectedParticipantId('');
           setErrors(prev => ({ ...prev, participants: '' }));
@@ -83,10 +83,10 @@ export default function MeetingDrawer({ isOpen, onClose, onSave, meetingToEdit, 
   };
 
   const handleRemoveParticipant = (id: string) => {
-      setFormState(prev => ({ ...prev, participants: prev.participants.filter(p => p.id !== id) }));
+      setFormState(prev => ({ ...prev, participants: prev.participants.filter(p => p.id.toString() !== id.toString()) }));
   };
   
-  const availableParticipants = allParticipants.filter(p => !formState.participants.some(fp => fp.id === p.id));
+  const availableParticipants = allParticipants.filter(p => !formState.participants.some(fp => fp.id.toString() === p.id.toString()));
 
   return (
     <AnimatePresence>
@@ -140,7 +140,7 @@ export default function MeetingDrawer({ isOpen, onClose, onSave, meetingToEdit, 
                        {formState.participants.map(p => (
                            <span key={p.id} className="badge bg-secondary d-flex align-items-center gap-2 p-2">
                                {p.name}
-                               <button type="button" className="btn-close btn-close-white" style={{fontSize: '0.6rem'}} onClick={() => handleRemoveParticipant(p.id)}></button>
+                               <button type="button" className="btn-close btn-close-white" style={{fontSize: '0.6rem'}} onClick={() => handleRemoveParticipant(p.id.toString())}></button>
                            </span>
                        ))}
                    </div>

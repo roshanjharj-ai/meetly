@@ -1,180 +1,76 @@
-import DOMPurify from 'dompurify';
-import { AnimatePresence, motion } from "framer-motion";
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { FaTimes } from "react-icons/fa";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import ChatPanel from "../../components/ChatPanel";
-import { UserContext } from "../../context/UserContext";
-import useMediaQuery from '../../hooks/useMediaQuery';
-import { useWebRTC } from "../../hooks/useWebRTC";
-import { ControlActionTypes } from "../../types/meeting.types";
-import UserGrid from "./UserGrid";
-import UserList from "./UserList";
-import MeetingFooter from './MeetingFooter';
+// src/pages/Meeting/MeetingHome.tsx
+import React, { useContext, useEffect, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
+import Spinner from '../../components/shared/Spinner';
+import { UserContext } from '../../context/UserContext';
+import MeetingCore from './MeetingCore';
 
-
-const SidebarContent = React.memo(({
-    isMobile, activeSidebarTab, setActiveSidebarTab, setIsSidebarOpen,
-    userList, botSpeaker, sharingBy, chatMessages, sendChatMessage, localUserId
-}: any) => {
-    return (
-        <div className="d-flex flex-column h-100 w-100">
-            <div className="p-2 d-flex align-items-center justify-content-between border-bottom border-secondary flex-shrink-0">
-                <ul className="nav nav-pills">
-                    <li className="nav-item"><button className={`nav-link  ${activeSidebarTab === "participants" && "active"}`} onClick={() => setActiveSidebarTab("participants")}>Participants</button></li>
-                    <li className="nav-item"><button className={`nav-link  ${activeSidebarTab === "chat" && "active"}`} onClick={() => setActiveSidebarTab("chat")}>Chat</button></li>
-                </ul>
-                {isMobile && <button className="btn btn-close " onClick={() => setIsSidebarOpen(false)}><FaTimes /></button>}
-            </div>
-            <div className="flex-grow-1 overflow-auto p-2">
-                {activeSidebarTab === "participants" ? (
-                    <UserList users={userList} botSpeaker={botSpeaker} excludeUserId={sharingBy} />
-                ) : (
-                    <ChatPanel messages={chatMessages} sendMessage={sendChatMessage} localUserId={localUserId} />
-                )}
-            </div>
-        </div>
-    );
-});
-
-
-export default function MeetingHome() {
-    const userContext = useContext(UserContext);
-    const navigate = useNavigate();
-    const isMobile = useMediaQuery("(max-width: 768px)");
-    const [room, setRoom] = useState("");
-    const [searchParam] = useSearchParams();
+const MeetingHome: React.FC = () => {
+    // **FIX**: Get theme from the context
+    const { user, isLoading: isUserLoading, theme } = useContext(UserContext);
+    const [searchParams] = useSearchParams();
+    const location = useLocation();
+    const [room, setRoom] = useState<string | null>(null);
+    const [userName, setUserName] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [initialAudioEnabled, setInitialAudioEnabled] = useState<boolean>(true);
+    const [initialVideoEnabled, setInitialVideoEnabled] = useState<boolean>(true);
 
     useEffect(() => {
-        const r = searchParam.get("room");
-        if (r != null) setRoom(r);
-    }, [searchParam]);
+        const urlRoom = searchParams.get("room");
+        const urlUser = searchParams.get("user");
 
-
-    const [isJoined, setIsJoined] = useState(false);
-    const [isMuted, setIsMuted] = useState(false);
-    const [isCameraOff, setIsCameraOff] = useState(false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
-    const [activeSidebarTab, setActiveSidebarTab] = useState<"participants" | "chat">("participants");
-
-    const { connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botSpeaker, peerStatus, sharedContent, speaking, isRecording, startRecording, stopRecording, speakers, isRecordingLoading, meetingProgress } =
-        useWebRTC(userContext.user == null ? "dummy" : room, (userContext.user == null) ? "aa" : userContext.user?.user_name);
-
-    useEffect(() => {
-        const start = async () => {
-            try { await connect(); setIsJoined(true); }
-            catch (err) { console.warn("Connection failed", err); }
-        };
-        start();
-    }, [connect]);
-
-    const stateRef = useRef({ isMuted, isCameraOff, isRecording, isScreenSharing });
-    useEffect(() => {
-        stateRef.current = { isMuted, isCameraOff, isRecording, isScreenSharing };
-    }, [isMuted, isCameraOff, isRecording, isScreenSharing]);
-
-    const disconnectingRef = useRef(false);
-    const performAction = useCallback(async (action: string) => {
-        const { isRecording: currentIsRecording, isScreenSharing: currentIsScreenSharing } = stateRef.current;
-        switch (action) {
-            case "end":
-                if (disconnectingRef.current) return;
-                disconnectingRef.current = true;
-                disconnect();
-                navigate("/");
-                break;
-            case ControlActionTypes.sidebar: setIsSidebarOpen(p => !p); break;
-            case "mute":
-                setIsMuted(prev => {
-                    const nextIsMuted = !prev;
-                    getLocalStream()?.getAudioTracks().forEach(t => (t.enabled = !nextIsMuted));
-                    broadcastStatus({ isMuted: nextIsMuted, isCameraOff: stateRef.current.isCameraOff });
-                    return nextIsMuted;
-                });
-                break;
-            case "camera":
-                setIsCameraOff(prev => {
-                    const nextIsCameraOff = !prev;
-                    getLocalStream()?.getVideoTracks().forEach(t => (t.enabled = !nextIsCameraOff));
-                    broadcastStatus({ isMuted: stateRef.current.isMuted, isCameraOff: nextIsCameraOff });
-                    return nextIsCameraOff;
-                });
-                break;
-            case "record": currentIsRecording ? stopRecording() : startRecording(); break;
-            case "share-none": currentIsScreenSharing ? await stopScreenShare() : await startScreenShare("none"); break;
-            case "share-mic": currentIsScreenSharing ? await stopScreenShare() : await startScreenShare("mic"); break;
-            case "share-system": currentIsScreenSharing ? await stopScreenShare() : await startScreenShare("system"); break;
-            case ControlActionTypes.shareStop: await stopScreenShare(); break;
+        if (!urlRoom) {
+            setError("Room ID is missing from the URL.");
+            return;
         }
-    }, [disconnect, getLocalStream, broadcastStatus, navigate, startRecording, stopRecording, startScreenShare, stopScreenShare]);
+        setRoom(urlRoom);
 
-    const userList = useMemo(() => {
-        if (userContext.user == null) return [];
-        const local = { id: userContext.user.user_name, isMuted, isCameraOff, isLocal: true, speaking: speakers[userContext.user.user_name] ?? false, };
-        const remotes = users.filter(u => u !== userContext.user?.user_name).map(id => ({ id, isMuted: peerStatus[id]?.isMuted ?? false, isCameraOff: peerStatus[id]?.isCameraOff ?? false, isLocal: false, speaking: speakers[id] ?? false, }));
-        return [local, ...remotes].sort((a, b) => a.id.localeCompare(b.id));
-    }, [userContext.user?.user_name, users, isMuted, isCameraOff, speakers, peerStatus]);
+        // Determine user name (same logic as before)
+        if (!isUserLoading && user?.user_name) {
+            setUserName(user.user_name);
+        } else if (urlUser) {
+            setUserName(urlUser);
+        } else if (!isUserLoading && !user) {
+            setError("User not logged in.");
+        } else if (!isUserLoading && !user?.user_name && !urlUser) {
+            setError("User name could not be determined.");
+        }
 
-    const userGridList = useMemo(() => {
-        if (userContext.user == null) return [];
-        const local = { id: userContext.user?.user_name, stream: getLocalStream() || undefined, isMuted, isCameraOff, isLocal: true, speaking: speakers[userContext.user?.user_name] ?? false };
-        const remotes = users.filter(u => u !== userContext.user?.user_name).map(id => ({ id, stream: remoteStreams[id], isMuted: peerStatus[id]?.isMuted ?? false, isCameraOff: peerStatus[id]?.isCameraOff ?? false, isLocal: false, speaking: speakers[id] ?? false }));
-        return [local, ...remotes].sort((a, b) => a.id.localeCompare(b.id));
-    }, [userContext.user?.user_name, users, getLocalStream, remoteStreams, isMuted, isCameraOff, speakers, peerStatus]);
+        // **FIX**: Read initial device state from location.state passed by JoinMeeting
+        // Provide defaults if state is not present (e.g., direct navigation)
+        const navState = location.state as { initialAudioEnabled?: boolean; initialVideoEnabled?: boolean } | null;
+        setInitialAudioEnabled(navState?.initialAudioEnabled ?? true);
+        setInitialVideoEnabled(navState?.initialVideoEnabled ?? true);
+        console.log("MeetingHome received initial prefs:", navState); // For debugging
 
-    const shareRef = useRef<HTMLVideoElement | null>(null);
-    const activeStream = sharingBy ? remoteScreens[sharingBy] : null;
-    useEffect(() => { if (shareRef.current) { shareRef.current.srcObject = activeStream; } }, [activeStream]);
+    }, [searchParams, user, isUserLoading, location.state]);
 
-    return (
-        <div className="d-flex flex-column h-100 position-relative bg-body " data-bs-theme={userContext.theme}>
-            <main className="d-flex overflow-hidden" style={{ height: "calc(100% - 91px)" }}>
-                <div className="flex-grow-1 h-100 d-flex align-items-center justify-content-center p-2 p-md-3">
-                    {activeStream ? (
-                        <motion.div className="w-100 h-100 bg-black rounded-3 overflow-hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                            <video ref={shareRef} autoPlay playsInline muted className="w-100 h-100" style={{ objectFit: "contain" }} />
-                        </motion.div>
-                    ) : sharedContent ? (
-                        <div className="w-100 h-100 overflow-auto bg-light rounded p-3 text-dark" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(sharedContent) }} />
-                    ) : (
-                        <UserGrid users={userGridList} />
-                    )}
-                </div>
-                {!isMobile && (
-                    <AnimatePresence>
-                        {isSidebarOpen && (
-                            <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ type: 'tween', duration: 0.3 }} className="bg-body h-100 border-start border-secondary flex-shrink-0" style={{ overflow: 'hidden' }}>
-                                <SidebarContent isMobile={isMobile} activeSidebarTab={activeSidebarTab} setActiveSidebarTab={setActiveSidebarTab} setIsSidebarOpen={setIsSidebarOpen} userList={userList} botSpeaker={botSpeaker} sharingBy={sharingBy} chatMessages={chatMessages} sendChatMessage={sendChatMessage} localUserId={userContext.user?.user_name} />
-                            </motion.aside>
-                        )}
-                    </AnimatePresence>
-                )}
-            </main>
-            <footer className='border-top border-secondary flex-shrink-0' style={{ height: 90 }}>
-                <MeetingFooter
-                    isRecordingLoading={isRecordingLoading}
-                    isSidebar={isSidebarOpen}
-                    performAction={performAction}
-                    status={isJoined ? "Connected" : "Connecting"}
-                    room={room || "rr"}
-                    isMuted={isMuted}
-                    isCameraOff={isCameraOff}
-                    isSharing={isScreenSharing}
-                    isSpeaking={speaking}
-                    isJoined={isJoined}
-                    isRecording={isRecording}
-                    meetingProgress={meetingProgress}
-                />
-            </footer>
-            {isMobile && (
-                <AnimatePresence>
-                    {isSidebarOpen && (
-                        <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: 'tween', duration: 0.3 }} className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column bg-body" style={{ zIndex: 2000 }}>
-                            <SidebarContent isMobile={isMobile} activeSidebarTab={activeSidebarTab} setActiveSidebarTab={setActiveSidebarTab} setIsSidebarOpen={setIsSidebarOpen} userList={userList} botSpeaker={botSpeaker} sharingBy={sharingBy} chatMessages={chatMessages} sendChatMessage={sendChatMessage} localUserId={userContext.user?.user_name} />
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            )}
-        </div>
-    );
-}
+    // --- Loading State ---
+    if (isUserLoading || !room || !userName) {
+        return (
+            <div className="d-flex justify-content-center align-items-center vh-100">
+                <Spinner /> Loading meeting...
+            </div>
+        );
+    }
+
+    // --- Error State ---
+    if (error) {
+        return (
+            <div className="d-flex justify-content-center align-items-center vh-100 flex-column">
+                <p className="text-danger mb-3">{error}</p>
+                <button className="btn btn-primary" onClick={() => window.location.href = '/'}>Go Home</button>
+            </div>
+        );
+    }
+
+    // --- Ready State ---
+    const userEmail = user?.email || '';
+
+    // **FIX**: Pass the theme prop down to MeetingCore
+    return <MeetingCore room={room} userName={userName} email={userEmail} theme={theme} initialAudioEnabled={initialAudioEnabled}
+        initialVideoEnabled={initialVideoEnabled} />;
+};
+
+export default MeetingHome;

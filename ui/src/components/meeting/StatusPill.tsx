@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import MeetingTimer from './MeetingTimer';
-import type { MeetingProgress } from '../../hooks/useWebRTC';
+import type { MeetingProgress } from '../../hooks/webrtc/types';
 import { FaCircle, FaExclamationTriangle } from 'react-icons/fa';
 
 interface StatusPillProps {

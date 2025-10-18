@@ -5,7 +5,7 @@ import { CgSpinner } from "react-icons/cg";
 import { FiDisc, FiMic, FiMicOff, FiMoreVertical, FiPhoneOff, FiShare, FiVideo, FiVideoOff } from "react-icons/fi";
 import { LuPanelRight, LuPanelRightClose } from "react-icons/lu";
 import { PiTelevisionSimpleBold } from "react-icons/pi";
-import type { MeetingProgress } from "../../hooks/useWebRTC";
+import type { MeetingProgress } from "../../hooks/webrtc/types";
 import { ControlActionTypes } from "../../types/meeting.types";
 import StatusPill from "./StatusPill";
 
