@@ -149,3 +149,27 @@ export const deleteParticipant = async (id: string): Promise<{ success: boolean 
         return { success: true };
     }
 };
+
+
+
+interface ValidateJoinPayload {
+    email: string;
+    room: string;
+    user_name?: string;
+}
+
+interface VerifyCodePayload {
+    email: string;
+    room: string;
+    code: string;
+}
+
+export const validateJoinRequest = async (payload: ValidateJoinPayload): Promise<{ message: string }> => {
+    const response = await axios.post(`${API_BASE_URL}/meetings/validate-join`, payload);
+    return response.data;
+};
+
+export const verifyJoinCode = async (payload: VerifyCodePayload): Promise<{ valid: boolean; message: string; token?: string }> => {
+    const response = await axios.post(`${API_BASE_URL}/meetings/verify-code`, payload);
+    return response.data;
+};

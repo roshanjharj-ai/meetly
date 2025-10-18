@@ -17,6 +17,7 @@ import ParticipantManager from './components/participant/ParticipantManager';
 import "./App.css";
 import UserProfile from './components/UserProfile';
 import MeetingHome from './components/meeting/MeetingHome';
+import PreJoinMeeting from './components/meeting/PreJoinMeeting';
 
 export default function App() {
   // Destructure values from the UserContext
@@ -40,6 +41,7 @@ export default function App() {
       <div className="vh-100" data-bs-theme={theme}>
         <BrowserRouter>
           <Routes>
+            <Route path="/prejoin" element={<PreJoinMeeting />} />
             <Route path="/login" element={<StartMeeting />} />
             <Route path="/signup" element={<Signup />} />
             {/* Any other path redirects to the login page */}

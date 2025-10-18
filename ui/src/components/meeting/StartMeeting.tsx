@@ -8,6 +8,7 @@ import { UserContext } from "../../context/UserContext";
 import useMediaQuery from "../../hooks/useMediaQuery";
 import SplitScreen from "./SplitScreen";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
 
 const StartMeeting = () => {
     const { login } = useContext(UserContext);
@@ -30,7 +31,7 @@ const StartMeeting = () => {
             formData.append('username', email); // FastAPI's form expects 'username'
             formData.append('password', password);
 
-            const response = await axios.post("http://127.0.0.1:8000/api/token", formData);
+            const response = await axios.post(API_BASE_URL + "/token", formData);
 
             login(response.data.access_token);
             navigate("/"); // Redirect on successful login
@@ -91,7 +92,7 @@ const StartMeeting = () => {
                             {isLoading ? "Logging in..." : "Login"}
                         </button>
                         <div className="text-center mt-3">
-                            <span className="text-muted">New here? </span>
+                            <span className="text-body-secondary">New here? </span>
                             <button
                                 type="button"
                                 className="btn btn-link p-0 text-primary fw-semibold"
