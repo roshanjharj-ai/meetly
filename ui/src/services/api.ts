@@ -43,10 +43,10 @@ let fallbackMeetings: Meeting[] = [
 ];
 
 export interface UserProfileUpdate {
-  full_name?: string;
-  user_name?: string;
-  mobile?: string;
-  picture?: string;
+    full_name?: string;
+    user_name?: string;
+    mobile?: string;
+    picture?: string;
 }
 
 export const updateUserProfile = async (data: UserProfileUpdate): Promise<any> => {
@@ -63,9 +63,9 @@ export const getMeetings = async (): Promise<Meeting[]> => {
         return response.data.map((meeting: any) => ({
             ...meeting,
             // Ensure participants is an array of Participant objects if backend schema differs
-            participants: meeting.participants || [], 
+            participants: meeting.participants || [],
             // Ensure dateTime is a string
-            dateTime: meeting.date_time || meeting.dateTime 
+            dateTime: meeting.date_time || meeting.dateTime
         }));
     } catch (error) {
         console.warn(`API call failed for getMeetings. Falling back to mock data.`, error);
@@ -76,10 +76,10 @@ export const getMeetings = async (): Promise<Meeting[]> => {
 // **FIX**: Modify the type used for creation data to align with the drawer state
 // This interface matches what MeetingDrawer actually constructs
 interface MeetingFormData {
-  subject: string;
-  agenda: string;
-  dateTime: string; // The drawer uses ISO string
-  participants: Participant[]; // The drawer manages full participant objects
+    subject: string;
+    agenda: string;
+    dateTime: string; // The drawer uses ISO string
+    participants: Participant[]; // The drawer manages full participant objects
 }
 
 export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => {
@@ -102,10 +102,10 @@ export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => 
     } catch (error) {
         console.warn(`API call failed for createMeeting. Falling back to mock data.`, error);
         // Use the original 'data' for mock creation, as it contains full participant objects
-        const newMeeting: Meeting = { 
-            ...data, 
-            id: uuidv4(), 
-            meetingLink: `https://meet.example.com/${uuidv4().substring(0, 8)}` 
+        const newMeeting: Meeting = {
+            ...data,
+            id: uuidv4(),
+            meetingLink: `https://meet.example.com/${uuidv4().substring(0, 8)}`
         };
         fallbackMeetings.push(newMeeting);
         return newMeeting; // Return the fully formed Meeting object
@@ -116,17 +116,17 @@ export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => 
 // **FIX**: UpdateMeeting needs similar transformation logic if used
 // Assuming UpdateMeetingRequest might also come from a similar form state
 export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
-     const payload = {
+    const payload = {
         id: data.id, // Assuming ID is part of the data object for update
         subject: data.subject,
         agenda: data.agenda,
-        date_time: data.dateTime, 
-        participant_ids: data.participants.map(p => parseInt(p.id, 10)) 
+        date_time: data.dateTime,
+        participant_ids: data.participants.map(p => parseInt(p.id, 10))
     };
     try {
         // Assuming your update endpoint also expects snake_case and participant_ids
         const response = await axios.put(`${API_BASE_URL}/updateMeeting/${data.id}`, payload); // Assuming PUT to /updateMeeting/{id}
-         return {
+        return {
             ...response.data,
             participants: response.data.participants || [],
             dateTime: response.data.date_time || response.data.dateTime
@@ -136,7 +136,7 @@ export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
         const index = fallbackMeetings.findIndex(m => m.id === data.id);
         if (index === -1) throw new Error("Mock meeting not found");
         // Update mock data with the structure expected by the UI
-        fallbackMeetings[index] = { ...fallbackMeetings[index], ...data }; 
+        fallbackMeetings[index] = { ...fallbackMeetings[index], ...data };
         return fallbackMeetings[index];
     }
 };
@@ -178,7 +178,7 @@ export const createParticipant = async (data: CreateParticipantRequest): Promise
 
 export const updateParticipant = async (data: UpdateParticipantRequest): Promise<Participant> => {
     try {
-        const response = await axios.put(`${API_BASE_URL}/updateParticipant`, data);
+        const response = await axios.put(`${API_BASE_URL}/updateParticipant/${data.id}`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for updateParticipant. Falling back to mock data.`, error);

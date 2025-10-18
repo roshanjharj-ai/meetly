@@ -1,0 +1,272 @@
+/* src/pages/Meeting/MeetingLayout.css */
+
+/* --- "DANCING" FIX: Smooth glow animation --- */
+@keyframes smoothGlow {
+  0% { box-shadow: 0 0 4px 0px rgba(16, 185, 129, 0.5); }
+  50% { box-shadow: 0 0 12px 4px rgba(16, 185, 129, 0.9); }
+  100% { box-shadow: 0 0 4px 0px rgba(16, 185, 129, 0.5); }
+}
+
+/* --- Main Layout --- */
+.meeting-layout-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  position: relative;
+  background: var(--bs-body-bg);
+  overflow: hidden;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.meeting-main-view {
+  flex: 1;
+  height: 100%;
+  min-width: 0; /* Important for flex-shrink */
+  position: relative;
+}
+
+.meeting-side-pane {
+  width: 240px; /* AnimatePresence will control this */
+  height: 100%;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* --- Dynamic Grid --- */
+.dynamic-grid {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  /* --- ASPECT RATIO FIX: Center vertically --- */
+  align-content: center;
+}
+
+/* --- Participant Card --- */
+.participant-card {
+  width: 100%;
+  /* --- ASPECT RATIO FIX: Let height be auto --- */
+  height: auto;
+  position: relative;
+  border: 3px solid transparent;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  background: var(--bs-tertiary-bg);
+  overflow: hidden;
+}
+
+/* --- "DANCING" FIX: Apply animation --- */
+.participant-card[data-speaking="true"] {
+  border-color: #10b981;
+  animation: smoothGlow 1.5s ease-in-out infinite;
+  /* The static shadow is replaced by the animation */
+}
+
+.participant-card-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.5rem; /* Inner radius */
+}
+
+.participant-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.participant-avatar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+}
+
+.participant-overlay-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  color: #fff;
+  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.participant-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participant-status-icons {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+/* --- ICON ALIGNMENT FIX: Add wrapper class --- */
+.status-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.icon-danger {
+  color: #e15759;
+}
+.icon-warning {
+  color: #edc949;
+}
+
+.participant-pin-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  z-index: 10;
+}
+
+.participant-card:hover .participant-pin-button {
+  opacity: 1;
+}
+
+.participant-pin-button:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+/* --- Main View Specifics --- */
+.main-view-pinned,
+.main-view-shared {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Pinned card should not have aspect ratio */
+.main-view-pinned .participant-card {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: unset;
+}
+
+.main-view-shared-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  border-radius: 0.75rem;
+}
+
+.main-view-shared-content {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: var(--bs-light);
+  color: var(--bs-dark);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+}
+
+/* --- Floating Bot --- */
+.floating-bot {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 50%; /* Make it circular */
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  width: 80px;
+  height: 80px;
+  justify-content: center;
+  text-align: center;
+  cursor: grab;
+  transition: border-color 0.3s ease;
+}
+
+.floating-bot[data-speaking="true"] {
+  border-color: #10b981;
+  box-shadow: 0 0 15px 2px rgba(16, 185, 129, 0.7);
+}
+
+.floating-bot:active {
+  cursor: grabbing;
+}
+
+.floating-bot-icon {
+  font-size: 2.2rem;
+  color: var(--bs-primary);
+  line-height: 1;
+}
+
+.floating-bot-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-body-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.floating-bot-speaking-pulse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(16, 185, 129, 0.7);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+/* --- Side Pane Scrollbar (Theme aware) --- */
+.meeting-side-pane::-webkit-scrollbar {
+  width: 8px;
+}
+.meeting-side-pane::-webkit-scrollbar-track {
+  background: var(--bs-tertiary-bg);
+  border-radius: 4px;
+}
+.meeting-side-pane::-webkit-scrollbar-thumb {
+  background-color: var(--bs-secondary);
+  border-radius: 4px;
+  border: 2px solid var(--bs-tertiary-bg);
+}

@@ -3,7 +3,7 @@ import React from 'react';
 import Controls from './Controls';
 import { motion, AnimatePresence } from 'framer-motion';
 import MeetingProgressBar from './MeetingProgressBar';
-import type { MeetingProgress } from '../../hooks/webrtc/types';
+import type { MeetingProgress } from '../../hooks/useWebRTC';
 import MeetingTimer from './MeetingTimer';
 
 interface MeetingFooterProps {
