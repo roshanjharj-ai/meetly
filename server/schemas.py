@@ -1,6 +1,26 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr,Field
 from typing import List, Optional
 from datetime import datetime
+
+
+class ValidateJoinRequest(BaseModel):
+    email: EmailStr
+    room: str
+    user_name: Optional[str] = None
+    
+class ValidateJoinResponse(BaseModel):
+    message: str
+    # We don't send the code back, it goes via email
+
+class VerifyCodeRequest(BaseModel):
+    email: EmailStr
+    room: str
+    code: str = Field(..., min_length=6, max_length=6) # Basic validation
+
+class VerifyCodeResponse(BaseModel):
+    valid: bool
+    message: str
+    token: Optional[str] = None
 
 # --- Participant Schemas ---
 class ParticipantBase(BaseModel):

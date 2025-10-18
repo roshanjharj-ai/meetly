@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 import auth
+import random
+import string
 
 # --- User CRUD ---
 def get_user_by_email(db: Session, email: str):
@@ -39,15 +41,59 @@ def create_oauth_user(db: Session, user: schemas.UserBase, provider: str, provid
     return db_user
 
 # --- Meeting CRUD ---
+
+def is_participant_invited(db: Session, room_id_or_link: str, email: str) -> bool:
+    """Checks if a user with the given email is a participant in the specified meeting."""
+    # Try finding the meeting by ID first, then by link if ID fails or isn't numeric
+    meeting = None
+    try:
+        meeting = db.query(models.Meeting).filter(models.Meeting.meeting_link == room_id_or_link).first()
+    except ValueError:
+        pass # Not a valid integer ID
+
+    if not meeting:
+        # Fallback to checking by meeting_link if ID search failed
+        meeting = db.query(models.Meeting).filter(models.Meeting.meeting_link == room_id_or_link).first()
+
+    if not meeting:
+        print(f"Meeting not found for room identifier: {room_id_or_link}")
+        return False
+
+    # Check if any participant in the meeting has the matching email
+    for participant in meeting.participants:
+        if participant.email.lower() == email.lower():
+            return True
+
+    print(f"User {email} not found in participants for meeting {room_id_or_link}")
+    return False
+
 def get_meetings(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Meeting).offset(skip).limit(limit).all()
+
+
+def generate_room_id():
+  """Generates a random room ID in the format CC-CCCC (uppercase letters)."""
+  
+  # Define the character set (uppercase letters)
+  chars = string.ascii_uppercase 
+  
+  # Generate the first part (2 letters)
+  part1 = ''.join(random.choice(chars) for _ in range(2))
+  
+  # Generate the second part (4 letters)
+  part2 = ''.join(random.choice(chars) for _ in range(4))
+  
+  # Combine with a hyphen
+  room_id = f"{part1}-{part2}"
+  
+  return room_id
 
 def create_meeting(db: Session, meeting: schemas.MeetingCreate):
     db_meeting = models.Meeting(
         subject=meeting.subject,
         agenda=meeting.agenda,
         date_time=meeting.date_time,
-        meeting_link=meeting.meeting_link
+        meeting_link=generate_room_id()
     )
     participants = db.query(models.Participant).filter(models.Participant.id.in_(meeting.participant_ids)).all()
     db_meeting.participants.extend(participants)
