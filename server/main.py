@@ -139,9 +139,68 @@ def get_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
 def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     return crud.create_meeting(db=db, meeting=meeting)
 
+@app.put("/api/updateMeeting/{meeting_id}", response_model=schemas.Meeting)
+def update_meeting_route(
+    meeting_id: int,
+    meeting_update: schemas.MeetingCreate, # Using Create schema as it matches client payload
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_meeting = crud.update_meeting(db, meeting_id=meeting_id, meeting_update=meeting_update)
+    if db_meeting is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    return db_meeting
+
+# --- ADD THIS ROUTE ---
+@app.delete("/api/deleteMeeting/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_meeting_route(
+    meeting_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_meeting = crud.delete_meeting(db, meeting_id=meeting_id)
+    if db_meeting is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    return # Return None with 204 status
+
+
 @app.get("/api/getParticipants", response_model=List[schemas.Participant])
 def get_participants(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     return crud.get_participants(db, skip=skip, limit=limit)
+
+# --- ADD THIS ROUTE ---
+@app.post("/api/createParticipant", response_model=schemas.Participant)
+def create_participant_route(
+    participant: schemas.ParticipantCreate,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    return crud.create_participant(db=db, participant=participant)
+
+# --- ADD THIS ROUTE ---
+@app.put("/api/updateParticipant/{participant_id}", response_model=schemas.Participant)
+def update_participant_route(
+    participant_id: int,
+    participant_update: schemas.ParticipantCreate, # Using Create schema for simplicity
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_participant = crud.update_participant(db, participant_id=participant_id, participant_update=participant_update)
+    if db_participant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
+    return db_participant
+
+# --- ADD THIS ROUTE ---
+@app.delete("/api/deleteParticipant/{participant_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_participant_route(
+    participant_id: int,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_participant = crud.delete_participant(db, participant_id=participant_id)
+    if db_participant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
+    return # Return None with 204 status
 
 # === WebSocket Logic ===
 @app.websocket("/ws/{room_id}/{user_id}")

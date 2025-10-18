@@ -88,6 +88,12 @@ def generate_room_id():
   
   return room_id
 
+
+def get_meeting_by_id(db: Session, meeting_id: int):
+    """Helper function to get a single meeting by its ID."""
+    return db.query(models.Meeting).filter(models.Meeting.id == meeting_id).first()
+
+
 def create_meeting(db: Session, meeting: schemas.MeetingCreate):
     db_meeting = models.Meeting(
         subject=meeting.subject,
@@ -102,13 +108,77 @@ def create_meeting(db: Session, meeting: schemas.MeetingCreate):
     db.refresh(db_meeting)
     return db_meeting
 
+def update_meeting(db: Session, meeting_id: int, meeting_update: schemas.MeetingCreate):
+    """Updates an existing meeting."""
+    db_meeting = get_meeting_by_id(db, meeting_id)
+    if not db_meeting:
+        return None
+
+    # Get update data from the pydantic model
+    update_data = meeting_update.model_dump(exclude_unset=True)
+
+    for key, value in update_data.items():
+        if key == "participant_ids":
+            # Special handling to update the participant relationships
+            participants = db.query(models.Participant).filter(models.Participant.id.in_(value)).all()
+            db_meeting.participants = participants
+        else:
+            setattr(db_meeting, key, value)
+            
+    db.add(db_meeting)
+    db.commit()
+    db.refresh(db_meeting)
+    return db_meeting
+
+# --- ADD THIS FUNCTION ---
+def delete_meeting(db: Session, meeting_id: int):
+    """Deletes a meeting by its ID."""
+    db_meeting = get_meeting_by_id(db, meeting_id)
+    if db_meeting:
+        db.delete(db_meeting)
+        db.commit()
+    return db_meeting
+
 # --- Participant CRUD ---
+def get_participant_by_id(db: Session, participant_id: int):
+    """Helper function to get a single participant by their ID."""
+    return db.query(models.Participant).filter(models.Participant.id == participant_id).first()
+
+
 def get_participants(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Participant).offset(skip).limit(limit).all()
 
 def create_participant(db: Session, participant: schemas.ParticipantCreate):
-    db_participant = models.Participant(**participant.dict())
+    # --- FIX: Use .model_dump() instead of .dict() ---
+    db_participant = models.Participant(**participant.model_dump())
     db.add(db_participant)
     db.commit()
     db.refresh(db_participant)
+    return db_participant
+
+# --- ADD THIS FUNCTION ---
+def update_participant(db: Session, participant_id: int, participant_update: schemas.ParticipantCreate):
+    """Updates an existing participant."""
+    db_participant = get_participant_by_id(db, participant_id)
+    if not db_participant:
+        return None
+
+    # Using ParticipantCreate schema, assuming ParticipantUpdate is similar
+    update_data = participant_update.model_dump(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(db_participant, key, value)
+        
+    db.add(db_participant)
+    db.commit()
+    db.refresh(db_participant)
+    return db_participant
+
+# --- ADD THIS FUNCTION ---
+def delete_participant(db: Session, participant_id: int):
+    """Deletes a participant by their ID."""
+    db_participant = get_participant_by_id(db, participant_id)
+    if db_participant:
+        db.delete(db_participant)
+        db.commit()
     return db_participant
