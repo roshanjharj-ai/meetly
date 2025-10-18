@@ -19,6 +19,7 @@ const Signup = () => {
   const { login } = useContext(UserContext);
 
   const [formData, setFormData] = useState({
+    user_name: "",
     name: "",
     email: "",
     password: "",
@@ -34,8 +35,8 @@ const Signup = () => {
   const handleLocalSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.password) {
-        setError("Please fill out all fields.");
-        return;
+      setError("Please fill out all fields.");
+      return;
     }
 
     setError("");
@@ -47,6 +48,7 @@ const Signup = () => {
         email: formData.email,
         password: formData.password,
         full_name: formData.name,
+        user_name: formData.user_name,
       };
       await axios.post(`${API_BASE_URL}/signup`, signupPayload);
 
@@ -76,22 +78,22 @@ const Signup = () => {
     setError("");
     setIsLoading(true);
     try {
-        const token = credentialResponse.credential;
-        if (!token) {
-            throw new Error("Google credential not found.");
-        }
-        
-        // Send the Google token to our backend
-        const response = await axios.post(`${API_BASE_URL}/auth/google`, { token });
+      const token = credentialResponse.credential;
+      if (!token) {
+        throw new Error("Google credential not found.");
+      }
 
-        // Update global state with our app's token and redirect
-        login(response.data.access_token);
-        navigate("/");
+      // Send the Google token to our backend
+      const response = await axios.post(`${API_BASE_URL}/auth/google`, { token });
+
+      // Update global state with our app's token and redirect
+      login(response.data.access_token);
+      navigate("/");
 
     } catch (err: any) {
-        setError(err.response?.data?.detail || "Google Sign-in failed. Please try again.");
+      setError(err.response?.data?.detail || "Google Sign-in failed. Please try again.");
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -130,6 +132,12 @@ const Signup = () => {
 
           {/* Local Signup Form */}
           <form onSubmit={handleLocalSignup} className="text-start">
+            <div className="form-floating mb-3">
+              <input type="text" id="user_name" placeholder="Full Name" value={formData.user_name}
+                onChange={(e) => setFormData((p) => ({ ...p, user_name: e.target.value }))}
+                className="form-control form-control-lg bg-transparent text-light border-light" required />
+              <label htmlFor="user_name" className="text-light"><FiUser className="me-2" /> User Name</label>
+            </div>
             <div className="form-floating mb-3">
               <input type="text" id="name" placeholder="Full Name" value={formData.name}
                 onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
