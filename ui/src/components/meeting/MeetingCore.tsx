@@ -1,5 +1,3 @@
-// src/pages/Meeting/MeetingCore.tsx
-import DOMPurify from "dompurify";
 import { AnimatePresence, motion } from "framer-motion";
 import React, {
   useCallback,
@@ -11,12 +9,12 @@ import React, {
 import { FaTimes } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import ChatPanel from "../../components/ChatPanel";
+import UserList from "../../components/meeting/UserList";
 import useMediaQuery from "../../hooks/useMediaQuery";
 import { useWebRTC } from "../../hooks/useWebRTC";
 import { ControlActionTypes } from "../../types/meeting.types";
 import MeetingFooter from "./MeetingFooter";
-import UserList from "../../components/meeting/UserList";
-import MeetingLayout, { DynamicGrid } from "./MeetingLayout"; 
+import MeetingLayout from "./MeetingLayout";
 
 // *** MOCK BOTNAMES (as requested) ***
 // TODO: Import this from 'src/Constants.ts'
@@ -311,28 +309,28 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
   const activeStream = sharingBy ? remoteScreens[sharingBy] : null;
 
   // --- Determine Main View (for side pane logic) ---
-  const pinnedUser = useMemo(
-    () => userGridList.find((u) => u.id === pinnedUserId),
-    [userGridList, pinnedUserId]
-  );
+  // const pinnedUser = useMemo(
+  //   () => userGridList.find((u) => u.id === pinnedUserId),
+  //   [userGridList, pinnedUserId]
+  // );
 
-  const mainViewType = useMemo(() => {
-    if (pinnedUser) return "pin";
-    if (activeStream) return "share";
-    if (sharedContent) return "content";
-    return "grid";
-  }, [pinnedUser, activeStream, sharedContent]);
+  // const mainViewType = useMemo(() => {
+  //   if (pinnedUser) return "pin";
+  //   if (activeStream) return "share";
+  //   if (sharedContent) return "content";
+  //   return "grid";
+  // }, [pinnedUser, activeStream, sharedContent]);
 
   // --- Determine Side Pane Users (for side pane logic) ---
-  const sidePaneUsers = useMemo(() => {
-    if (mainViewType === "grid") return [];
+  // const sidePaneUsers = useMemo(() => {
+  //   if (mainViewType === "grid") return [];
     
-    // Filter out bots AND the pinned user
-    return userGridList.filter(u => 
-      !BotNames.includes(u.id) && u.id !== pinnedUserId
-    );
+  //   // Filter out bots AND the pinned user
+  //   return userGridList.filter(u => 
+  //     !BotNames.includes(u.id) && u.id !== pinnedUserId
+  //   );
 
-  }, [userGridList, mainViewType, pinnedUserId]);
+  // }, [userGridList, mainViewType, pinnedUserId]);
 
 
   // --- JSX return statement ---

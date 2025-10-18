@@ -329,7 +329,6 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
   users,
   botNames,
   botSpeaker,
-  sharingBy,
   sharedContent,
   remoteScreenStream,
   pinnedUserId,
