@@ -336,14 +336,48 @@ class WebRTCManager {
     if (!pc && action === "offer") {
       pc = await this.createPeer(from, false);
     }
-    if (!pc) return;
+    // if (!pc) return;
+    if (!pc) {
+      pc = await this.createPeer(from, false);
+    }
 
     try {
       if (action === "offer") {
-        await pc.setRemoteDescription(new RTCSessionDescription(payload));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        this.wsSend({ type: "signal", action: "answer", from: this.userId, to: from, payload: pc.localDescription });
+        // await pc.setRemoteDescription(new RTCSessionDescription(payload));
+        // const answer = await pc.createAnswer();
+        // await pc.setLocalDescription(answer);
+        // this.wsSend({ type: "signal", action: "answer", from: this.userId, to: from, payload: pc.localDescription });
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(payload));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          this.wsSend({
+            type: "signal",
+            action: "answer",
+            from: this.userId,
+            to: from,
+            payload: answer,
+          });
+        } catch (err) {
+          this.log("⚠️ handleSignal offer error:", err);
+          if (String(err).includes("m-lines")) {
+            // SDP order mismatch → rebuild connection cleanly
+            this.log("⚠️ SDP m-line mismatch, recreating peer for", from);
+            try { pc.close(); } catch { }
+            delete this.peers[from];
+            const newPc = await this.createPeer(from, false);
+            // Re-send negotiation safely
+            const offer = await newPc.createOffer();
+            await newPc.setLocalDescription(offer);
+            this.wsSend({
+              type: "signal",
+              action: "offer",
+              from: this.userId,
+              to: from,
+              payload: offer,
+            });
+          }
+        }
       } else if (action === "answer") {
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
       } else if (action === "ice" && payload) {
@@ -376,16 +410,15 @@ class WebRTCManager {
     this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
   }
 
+  // --- inside class WebRTCManager ---
   async createPeer(targetId: string, initiator: boolean): Promise<RTCPeerConnection> {
-    if (this.peers[targetId] || this.creatingPeer[targetId]) {
-      return this.peers[targetId];
-    }
+    if (this.peers[targetId] || this.creatingPeer[targetId]) return this.peers[targetId];
     this.creatingPeer[targetId] = true;
     this.log("🧩 createPeer →", targetId, "initiator:", initiator);
 
     const pc = new RTCPeerConnection(this.iceConfig);
 
-    // --- Event hooks ---
+    // --- Event handlers ---
     pc.onicecandidate = (e) => {
       if (e.candidate) {
         this.wsSend({ type: "signal", action: "ice", from: this.userId, to: targetId, payload: e.candidate });
@@ -405,7 +438,7 @@ class WebRTCManager {
               try { pc.close(); } catch { }
               delete this.peers[targetId];
               this.createPeer(targetId, true).catch(e => this.log("recreatePeer error:", e));
-            }, 700);
+            }, 500);
           }
         } catch (err) {
           this.log("ICE restart error:", err);
@@ -416,14 +449,14 @@ class WebRTCManager {
     pc.onconnectionstatechange = () => {
       this.log("Conn state", targetId, pc.connectionState);
       if (["failed", "closed"].includes(pc.connectionState)) {
-        this.onRemoteStream?.(targetId, null);
-        this.onRemoteScreen?.(targetId, null);
         try { pc.close(); } catch { }
         delete this.peers[targetId];
+        this.onRemoteStream?.(targetId, null);
+        this.onRemoteScreen?.(targetId, null);
       }
     };
 
-    // ensure local stream exists BEFORE adding tracks
+    // Ensure local media is ready
     try {
       if (!this.localStream) {
         await this.ensureLocalStream(this.initialAudioEnabled, this.initialVideoEnabled);
@@ -433,7 +466,7 @@ class WebRTCManager {
       this.log("ensureLocalStream failed in createPeer:", err);
     }
 
-    // --- DataChannel ---
+    // DataChannel
     if (initiator) {
       const dc = pc.createDataChannel("datachannel");
       dc.onmessage = (ev) => this.handleDataChannelMessage(ev, targetId);
@@ -445,11 +478,11 @@ class WebRTCManager {
       };
     }
 
-    // --- Attach local tracks ---
+    // Attach local tracks
     this.attachLocalTracks(pc);
     this.log("🎧 Attached local tracks →", targetId, this.localStream?.getTracks().length || 0);
 
-    // --- Track handler for remote streams ---
+    // Remote tracks
     pc.ontrack = (evt) => {
       this.log("📡 ontrack from", targetId, evt.track.kind, evt.streams.length);
       const stream = evt.streams[0];
@@ -460,10 +493,14 @@ class WebRTCManager {
       }
     };
 
-    // --- Auto renegotiation when needed ---
+    // Guarded negotiation
     pc.onnegotiationneeded = async () => {
+      if (pc.signalingState !== "stable") {
+        this.log("⏳ Skip negotiation (signaling not stable) for", targetId);
+        return;
+      }
       try {
-        this.log("onnegotiationneeded → offer to", targetId);
+        this.log("🔁 onnegotiationneeded → offer to", targetId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         this.wsSend({
@@ -478,7 +515,7 @@ class WebRTCManager {
       }
     };
 
-    // --- Create and send initial offer if initiator ---
+    // Initial offer
     if (initiator) {
       try {
         const offer = await pc.createOffer();
@@ -495,11 +532,11 @@ class WebRTCManager {
       }
     }
 
-    // store and mark ready
     this.peers[targetId] = pc;
     delete this.creatingPeer[targetId];
     return pc;
   }
+
 
   // Replace audio/video track across all peer connections and update localStream
   async setAudioDevice(deviceId: string | null) {
@@ -590,21 +627,40 @@ class WebRTCManager {
 
   async stopScreenShare() {
     if (!this.screenStream) return;
-    this.screenStream.getTracks().forEach(track => track.stop());
-    this.screenStream = null;
+    try {
+      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream = null;
 
-    Object.entries(this.screenSenders).forEach(([peerId, senders]) => {
-      const pc = this.peers[peerId];
-      if (pc) {
-        senders.forEach(sender => {
-          try { pc.removeTrack(sender); } catch { }
+      // Object.entries(this.screenSenders).forEach(([peerId, senders]) => {
+      //   const pc = this.peers[peerId];
+      //   if (pc) {
+      //     senders.forEach(sender => {
+      //       try { pc.removeTrack(sender); } catch { }
+      //     });
+      //   }
+      // });
+      const cameraTrack = this.localStream?.getVideoTracks()[0];
+      Object.values(this.peers).forEach((pc) => {
+        const senders = pc.getSenders().filter((s) => s.track?.kind === "video");
+        senders.forEach((sender) => {
+          try { sender.replaceTrack(cameraTrack || null); } catch { }
         });
+      });
+
+      // Reset peers to fix SDP order mismatch
+      const peersToRecreate = Object.keys(this.peers);
+      for (const pid of peersToRecreate) {
+        try { this.peers[pid].close(); } catch { }
+        delete this.peers[pid];
+        await this.createPeer(pid, true);
       }
-    });
-    this.screenSenders = {};
-    this.sharingBy = null;
-    this.onSharingBy?.(null);
-    this.broadcastDataChannel({ type: "screen_update", payload: { sharing: false, by: this.userId } });
+      this.screenSenders = {};
+      this.sharingBy = null;
+      this.onSharingBy?.(null);
+      this.broadcastDataChannel({ type: "screen_update", payload: { sharing: false, by: this.userId } });
+    } catch (err) {
+      this.log("stopScreenShare error:", err);
+    }
   }
 
   broadcastDataChannel(message: DataChannelMessage) {
