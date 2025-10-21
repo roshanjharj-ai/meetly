@@ -68,7 +68,7 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
       analyserRef.current?.disconnect();
       sourceRef.current?.disconnect();
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current.close().catch(() => { });
       }
       // stop any created preview stream
       stream?.getTracks().forEach(t => t.stop());
@@ -156,14 +156,22 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
   const toggleAudio = () => setAudioEnabled(prev => !prev);
   const toggleVideo = () => setVideoEnabled(prev => !prev);
 
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, []);
+
   return (
-    <motion.div 
+    <motion.div
       className="device-preview-container card card-body"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
     >
-       <style>{`
+      <style>{`
           .device-preview-container { background-color: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); border-radius: 12px; }
           .video-preview { width: 100%; aspect-ratio: 16/9; background-color: #000; border-radius: 8px; overflow: hidden; margin-bottom: 1rem; position: relative; }
           .video-preview video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); } /* Mirror effect */
@@ -188,9 +196,9 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
           {audioEnabled ? <FiMic size={18} /> : <FiMicOff size={18} />}
         </button>
         <div className="device-select">
-          <select 
-            className="form-select form-select-sm" 
-            value={selectedAudioDevice} 
+          <select
+            className="form-select form-select-sm"
+            value={selectedAudioDevice}
             onChange={e => setSelectedAudioDevice(e.target.value)}
             disabled={!audioEnabled}
           >
@@ -200,17 +208,17 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
             {audioDevices.length === 0 && <option>No audio devices</option>}
           </select>
           {audioEnabled && (
-             <div className="audio-meter-track"><div ref={audioMeterRef} className="audio-meter-fill"></div></div>
+            <div className="audio-meter-track"><div ref={audioMeterRef} className="audio-meter-fill"></div></div>
           )}
         </div>
       </div>
       <div className="controls">
-         <button onClick={toggleVideo} className={`control-button ${videoEnabled ? 'on' : 'off'}`}>
+        <button onClick={toggleVideo} className={`control-button ${videoEnabled ? 'on' : 'off'}`}>
           {videoEnabled ? <FiVideo size={18} /> : <FiVideoOff size={18} />}
         </button>
-        <select 
-          className="form-select form-select-sm device-select" 
-          value={selectedVideoDevice} 
+        <select
+          className="form-select form-select-sm device-select"
+          value={selectedVideoDevice}
           onChange={e => setSelectedVideoDevice(e.target.value)}
           disabled={!videoEnabled}
         >
@@ -220,11 +228,11 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
           {videoDevices.length === 0 && <option>No video devices</option>}
         </select>
       </div>
-       <div className="d-grid mt-2">
-         <button className="btn btn-sm btn-outline-secondary w-100" onClick={() => getDevices(true)}>
-          <FiRefreshCw size={14} className="me-1"/> Refresh Devices
-         </button>
-       </div>
+      <div className="d-grid mt-2">
+        <button className="btn btn-sm btn-outline-secondary w-100" onClick={() => getDevices(true)}>
+          <FiRefreshCw size={14} className="me-1" /> Refresh Devices
+        </button>
+      </div>
     </motion.div>
   );
 };

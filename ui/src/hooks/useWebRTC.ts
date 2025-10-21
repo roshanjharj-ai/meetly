@@ -198,58 +198,94 @@ class WebRTCManager {
     };
   }
 
+  // --- inside class WebRTCManager ---
   disconnect() {
-    this.log("?? Manager disconnect initiated");
+    this.log("🔴 Disconnect called for user:", this.userId);
 
-    const stopMediaStream = (stream: MediaStream | null, streamName: string) => {
-      if (stream) {
-        this.log(`Stopping ${streamName} tracks...`);
-        let stoppedCount = 0;
-        stream.getTracks().forEach((track) => {
-          if (track.readyState === 'live') {
+    // --- 1️⃣ Stop all local media tracks ---
+    if (this.localStream) {
+      this.log("Stopping local media tracks...");
+      this.localStream.getTracks().forEach((track) => {
+        try {
+          if (track.readyState === "live") {
             track.stop();
-            stoppedCount++;
-            this.log(`Stopped ${streamName} track: ${track.kind} (${track.label || track.id})`);
+            this.log(`Stopped ${track.kind} track (${track.label || track.id})`);
           }
-        });
-        this.log(`${stoppedCount} ${streamName} tracks stopped.`);
-        return null;
-      } else {
-        this.log(`No active ${streamName} to stop.`);
-        return null;
+        } catch (err) {
+          this.log("Error stopping track:", err);
+        }
+      });
+
+      // Detach from any <video> or <audio> elements
+      this.localStream.getTracks().forEach((track) => {
+        track.onended = null;
+      });
+      // Clear the object reference so GC can release camera/mic
+      this.localStream = null;
+    }
+
+    // --- 2️⃣ Stop screen share stream (if any) ---
+    if (this.screenStream) {
+      this.log("Stopping screen share tracks...");
+      this.screenStream.getTracks().forEach((track) => {
+        try { track.stop(); } catch { }
+      });
+      this.screenStream = null;
+    }
+
+    // --- 3️⃣ Close audio context / analyser if used (releases mic lock in mobile) ---
+    try {
+      if (typeof (window as any).audioContextRef !== "undefined") {
+        const ctx = (window as any).audioContextRef;
+        if (ctx && ctx.state !== "closed") {
+          this.log("Closing shared AudioContext...");
+          ctx.close().catch(() => { });
+        }
+        (window as any).audioContextRef = null;
       }
-    };
+    } catch (err) {
+      this.log("Error closing audio context:", err);
+    }
 
-    // 1. Stop local media tracks FIRST
-    this.localStream = stopMediaStream(this.localStream, "local media stream");
-    this.screenStream = stopMediaStream(this.screenStream, "screen share stream");
-
-    // 2. Close peer connections
+    // --- 4️⃣ Close all peer connections cleanly ---
     this.log("Closing peer connections...");
-    Object.keys(this.peers).forEach(peerId => {
+    Object.entries(this.peers).forEach(([pid, pc]) => {
       try {
-        this.peers[peerId].close();
+        pc.getSenders().forEach((s) => {
+          try { s.replaceTrack(null); } catch { }
+        });
+        pc.getReceivers().forEach((r) => {
+          try { r.track?.stop(); } catch { }
+        });
+        pc.close();
       } catch { }
     });
-    this.peers = {}; this.dataChannels = {}; this.screenSenders = {}; this.sharingBy = null;
+    this.peers = {};
+    this.dataChannels = {};
+    this.screenSenders = {};
+    this.creatingPeer = {};
 
-    // 3. Close WebSocket connection
-    if (this.ws && this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) {
-      try { this.ws.close(); } catch { }
+    // --- 5️⃣ Close WebSocket ---
+    if (this.ws) {
+      try {
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.close();
+        }
+      } catch { }
+      this.ws = null;
     }
-    this.ws = null;
 
-    // 4. Reset state callbacks
-    this.log("Resetting state callbacks...");
+    // --- 6️⃣ Notify UI and clear callbacks ---
+    this.onLocalStream?.(null);
+    this.onRemoteStream?.("", null);
+    this.onRemoteScreen?.("", null);
+    this.onSharingBy?.(null);
     this.onUsers?.([]);
     this.onUsersCount?.(0);
-    this.onSharingBy?.(null);
-    this.onRemoteStream?.('', null);
-    this.onRemoteScreen?.('', null);
-    this.onLocalStream?.(null);
 
-    this.log("?? Disconnect completed.");
+    this.log("✅ All devices and connections released.");
   }
+
 
   async onWsMessage(msg: SignalMsg) {
     if (!msg) return;
