@@ -533,6 +533,10 @@ class WebRTCManager {
     this.log("🧩 createPeer →", targetId, "initiator:", initiator);
 
     const pc: RTCPeerConnection & any = new RTCPeerConnection(this.iceConfig) as any;
+    (pc as any)._makingOffer = false;
+    (pc as any)._ignoreOffer = false;
+    (pc as any)._polite = false;
+    (pc as any)._queuedCandidates = [];
     pc._makingOffer = false;
     pc._ignoreOffer = false;
     pc._queuedCandidates = [];
@@ -626,35 +630,27 @@ class WebRTCManager {
     this.attachLocalTracks(pc);
     this.log("🎧 Attached local tracks →", targetId, this.localStream?.getTracks().length || 0);
 
-    pc.ontrack = (evt: any) => {
-      this.log("📡 ontrack from", targetId, evt.track.kind, evt.streams.length);
-      const stream = evt.streams[0];
-      if (evt.track.kind === "video" && this.sharingBy === targetId) {
-        this.onRemoteScreen?.(targetId, stream);
-      } else {
-        this.onRemoteStream?.(targetId, stream);
+    pc.ontrack = (e: any) => {
+      this.log("📡 ontrack from", targetId, e.track.kind);
+      if (e.track.kind === "audio" && e.streams?.[0]) {
+        const audioElem = document.createElement("audio");
+        audioElem.srcObject = e.streams[0];
+        // ✅ FIX: TS-safe inline playback for Safari/iOS
+        (audioElem as any).playsInline = true;
+        audioElem.autoplay = true;
+        audioElem.muted = false;
+        document.body.appendChild(audioElem);
       }
+      this.onRemoteStream?.(targetId, e.streams?.[0]);
     };
 
     // --- FIX B: Debounce onnegotiationneeded ---
     pc.onnegotiationneeded = async () => {
-      // prevent repeated renegotiation loops
-      if (pc._makingOffer || pc.signalingState !== "stable") {
-        this.log("🟡 skip negotiation →", targetId, pc.signalingState);
-        return;
-      }
-
-      pc._makingOffer = true;
+      if ((pc as any)._makingOffer || pc.signalingState !== "stable") return;
+      (pc as any)._makingOffer = true;
       try {
-        this.log("🔁 onnegotiationneeded → creating offer for", targetId);
         const offer = await pc.createOffer();
-
-        // ensure still stable before applying
-        if (pc.signalingState !== "stable") {
-          this.log("🟡 abort offer; state changed mid-offer for", targetId);
-          return;
-        }
-
+        if (pc.signalingState !== "stable") return;
         await pc.setLocalDescription(offer);
         this.wsSend({
           type: "signal",
@@ -666,7 +662,7 @@ class WebRTCManager {
       } catch (err) {
         this.log("negotiationneeded error:", err);
       } finally {
-        pc._makingOffer = false;
+        (pc as any)._makingOffer = false;
       }
     };
 
@@ -693,6 +689,9 @@ class WebRTCManager {
     }
 
     delete this.creatingPeer[targetId];
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((t) => pc.addTrack(t, this.localStream));
+    }
     return pc;
   }
 
