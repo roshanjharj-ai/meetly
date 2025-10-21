@@ -62,7 +62,7 @@ class WebRTCManager {
     _queuedCandidates?: RTCIceCandidateInit[];
     _polite?: boolean;
     _iceRestartTimer?: number | null;
-    _negotiationTimer?: number | null; // --- FIX B: Add timer property for debouncing
+    _negotiationTimer?: number | null;
   }> = {};
   dataChannels: Record<string, RTCDataChannel> = {};
   localStream: MediaStream | null = null;
@@ -169,14 +169,11 @@ class WebRTCManager {
       return;
     }
 
+    // If manager already disconnected permanently (guard), do not reconnect.
     if (this.isDisconnected) {
-      this.log("⚠️ Disconnect called, but already disconnected.");
+      this.log("⚠️ connect() called but manager is flagged disconnected.");
       return;
     }
-    this.isDisconnected = true;
-
-    // --- FIX A: Reset disconnect flag on new connection ---
-    this.isDisconnected = false;
 
     try {
       await this.ensureLocalStream(initialAudioEnabled, initialVideoEnabled);
@@ -212,6 +209,14 @@ class WebRTCManager {
 
   disconnect() {
     this.log("🔴 Disconnect called for user:", this.userId);
+
+    // Idempotent guard: ensure we only run the heavy cleanup once.
+    if (this.isDisconnected) {
+      this.log("⚠️ Disconnect called, but already disconnected.");
+      return;
+    }
+    this.isDisconnected = true;
+
     try {
       // stop local tracks
       if (this.localStream) {
@@ -231,30 +236,35 @@ class WebRTCManager {
         } catch { }
       }
 
-      // ❗ new part: detach and nullify all references
+      // ❗ detach and nullify all references
       this.localStream = null;
       this.screenStream = null;
 
-      // also clear refs used by UI elements
+      // also clear srcObject from UI video elements
       if (typeof window !== "undefined") {
         document.querySelectorAll("video").forEach((el) => {
-          if (el.srcObject instanceof MediaStream) {
-            el.srcObject = null;
-          }
+          try {
+            if ((el as HTMLVideoElement).srcObject instanceof MediaStream) {
+              (el as HTMLVideoElement).srcObject = null;
+            }
+          } catch { }
         });
       }
 
-      // clear any stored senders or track maps
-      this.screenSenders = {};
-      this.peers = {};
-
-      // close connections
+      // close and clear peer connections
       for (const [peerId, pc] of Object.entries(this.peers)) {
         try {
           this.log("Closing peer connection for", peerId);
           pc.close();
         } catch { }
       }
+      this.peers = {};
+      this.dataChannels = {};
+      this.screenSenders = {};
+
+      // close websocket
+      try { this.ws?.close(); } catch { }
+      this.ws = null;
 
       this.log("✅ All devices and connections released.");
     } catch (err) {
@@ -319,7 +329,6 @@ class WebRTCManager {
       }
     }
     // --- FIX B: Check if peer still exists ---
-    // It might have been closed by the m-line error handler
     if (!pc || pc.signalingState === 'closed') {
       this.log("? handleSignal: Peer not found or closed, ignoring signal", action, from);
       return;
@@ -402,10 +411,7 @@ class WebRTCManager {
       this.log(`handleSignal error on action ${action}:`, err);
 
       // --- FIX B: Handle m-line error by safely closing the peer ---
-      // Recreating the peer here was causing *more* m-line errors.
-      // The safest action is to close this broken peer. The 'user_list'
-      // logic will detect the missing peer and rebuild it cleanly.
-      if (String(err).includes('m-lines')) {
+      if (String(err).includes('m-lines') || String(err).includes('order of m-lines')) {
         this.log('❌ FATAL: SDP m-line mismatch. Closing broken peer for', from);
         try { pc.close(); } catch { }
         delete this.peers[from];
@@ -433,9 +439,33 @@ class WebRTCManager {
     }
   }
 
+  // --- PATCH: attachLocalTracks now replaces tracks on pre-created transceivers (if present),
+  // and falls back to addTrack only if no suitable sender exists.
   private attachLocalTracks(pc: RTCPeerConnection & any) {
     if (!this.localStream) return;
-    this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
+
+    const audioTrack = this.localStream.getAudioTracks()[0] ?? null;
+    const videoTrack = this.localStream.getVideoTracks()[0] ?? null;
+
+    // Replace audio sender track if present; otherwise add.
+    if (audioTrack) {
+      const audioSender = pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'audio');
+      if (audioSender) {
+        try { audioSender.replaceTrack(audioTrack); } catch (e) { this.log("attachLocalTracks: replace audio failed", e); }
+      } else {
+        try { pc.addTrack(audioTrack, this.localStream); } catch (e) { this.log("attachLocalTracks: add audio failed", e); }
+      }
+    }
+
+    // Replace camera video sender track if present; otherwise add.
+    if (videoTrack) {
+      const videoSender = pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'video');
+      if (videoSender) {
+        try { videoSender.replaceTrack(videoTrack); } catch (e) { this.log("attachLocalTracks: replace video failed", e); }
+      } else {
+        try { pc.addTrack(videoTrack, this.localStream); } catch (e) { this.log("attachLocalTracks: add video failed", e); }
+      }
+    }
   }
 
   async createPeer(targetId: string, initiator: boolean): Promise<RTCPeerConnection & any> {
@@ -449,7 +479,7 @@ class WebRTCManager {
     pc._queuedCandidates = [];
     pc._polite = !(this.userId < targetId);
     pc._iceRestartTimer = null;
-    pc._negotiationTimer = null; // --- FIX B: Initialize timer
+    pc._negotiationTimer = null;
 
     this.peers[targetId] = pc;
 
@@ -487,7 +517,6 @@ class WebRTCManager {
     pc.onconnectionstatechange = () => {
       this.log("Conn state", targetId, pc.connectionState);
       if (["failed", "closed"].includes(pc.connectionState)) {
-        // --- FIX A: Clear negotiation timer on close ---
         if (pc._negotiationTimer) {
           window.clearTimeout(pc._negotiationTimer);
         }
@@ -507,6 +536,22 @@ class WebRTCManager {
       this.log("ensureLocalStream failed in createPeer:", err);
     }
 
+    // --- PATCH: create stable transceivers up-front to guarantee SDP m-line order ---
+    // Order matters: audio, camera-video, screen-video (reserved).
+    // Creating transceivers here prevents later add/remove from changing m-line order.
+    try {
+      // Only create transceivers once per PeerConnection (creating duplicates is harmless but avoid it)
+      const existing = pc.getTransceivers();
+      if (!existing || existing.length === 0) {
+        pc.addTransceiver("audio", { direction: "sendrecv" });
+        pc.addTransceiver("video", { direction: "sendrecv" }); // camera
+        pc.addTransceiver("video", { direction: "sendrecv" }); // reserved for screen share
+        this.log("Created stable transceivers for", targetId);
+      }
+    } catch (err) {
+      this.log("createPeer: addTransceiver failed (non-fatal):", err);
+    }
+
     if (initiator) {
       const dc = pc.createDataChannel("datachannel");
       dc.onmessage = (ev: any) => this.handleDataChannelMessage(ev, targetId);
@@ -518,6 +563,7 @@ class WebRTCManager {
       };
     }
 
+    // Attach tracks using smarter attachLocalTracks (replace if sender exists)
     this.attachLocalTracks(pc);
     this.log("🎧 Attached local tracks →", targetId, this.localStream?.getTracks().length || 0);
 
@@ -532,23 +578,18 @@ class WebRTCManager {
     };
 
     // --- FIX B: Debounce onnegotiationneeded ---
-    // This is the most critical fix. It prevents the "m-line" errors and
-    // negotiation loops by "coalescing" multiple rapid-fire events
-    // (like adding/removing screen share tracks) into a single, stable
-    // negotiation event after a short delay.
     pc.onnegotiationneeded = async () => {
       if (pc._negotiationTimer) {
         window.clearTimeout(pc._negotiationTimer);
       }
       pc._negotiationTimer = window.setTimeout(async () => {
-        pc._negotiationTimer = null; // Clear timer
+        pc._negotiationTimer = null;
 
         if (pc._makingOffer || pc.signalingState !== "stable" || pc._ignoreOffer) {
           this.log(`? Skip negotiation (busy, unstable, or ignoring) for ${targetId}. State: ${pc.signalingState}, MakingOffer: ${pc._makingOffer}, IgnoreOffer: ${pc._ignoreOffer}`);
           return;
         }
 
-        // Check for closed state *again* just in case
         if (pc.signalingState === 'closed') {
           this.log(`? Skip negotiation (peer closed) for ${targetId}`);
           return;
@@ -964,20 +1005,15 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const connect = useCallback(async (initialAudioEnabled: boolean = true, initialVideoEnabled: boolean = true) => {
     if (!mgrRef.current) return;
     try {
-      // --- FIX A: Call connect on the manager ---
-      // We also need to reset the ref if it's null, which the useEffect does.
-      // But we should ensure we *create* it if it's null.
       if (!mgrRef.current) {
         mgrRef.current = new WebRTCManager(room, userId, signalingBase);
-        // Re-run setup logic from useEffect? No, useEffect will handle it.
-        // This is tricky. Let's assume useEffect has run.
       }
       await mgrRef.current.connect(initialAudioEnabled, initialVideoEnabled);
       setLocalStream(mgrRef.current.localStream);
     } catch (err) {
       console.error("Connect error:", err);
     }
-  }, [room, userId, signalingBase]); // --- FIX A: Add dependencies
+  }, [room, userId, signalingBase]);
 
   useEffect(() => {
     if (!localStream) return;
@@ -1025,8 +1061,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     console.log("[useWebRTC disconnect] Hook disconnect called.");
     if (mgrRef.current) {
       mgrRef.current.disconnect();
-      // --- FIX A: Don't nullify the ref here, let the useEffect cleanup handle it ---
-      // mgrRef.current = null; 
+      // Let the effect cleanup null the ref on unmount - but if caller explicitly disconnects,
+      // we keep the ref around to allow reconnect if desired. (mgrRef.current internal guard prevents repeated runs)
       setLocalStream(null);
       setUsers([]);
       setRemoteStreams({});
