@@ -246,12 +246,11 @@ class WebRTCManager {
       this.log("Error closing audio context:", err);
     }
 
-    // --- 4️⃣ Wait briefly before nullifying stream ---
-    setTimeout(() => {
-      this.localStream = null;
-      this.onLocalStream?.(null);
-      this.log("🎬 Local media fully released.");
-    }, 200);
+    // --- 4️⃣ --- FIX --- Synchronously nullify stream and notify listeners ---
+    // Removed the setTimeout wrapper to prevent race conditions on unmount
+    this.localStream = null;
+    this.onLocalStream?.(null);
+    this.log("🎬 Local media fully released.");
 
     // --- 5️⃣ Close peers + data channels ---
     this.log("Closing peer connections...");
@@ -730,38 +729,33 @@ class WebRTCManager {
       });
       this.screenStream = null;
 
-      // --- 2️⃣ Reacquire mic if screen shared with audio ---
-      let micTrack: MediaStreamTrack | null = null;
-      try {
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micTrack = micStream.getAudioTracks()[0] || null;
-        this.log("🎤 Reacquired microphone track after screen stop:", micTrack ? micTrack.label : "none");
-      } catch (err) {
-        this.log("⚠️ Unable to reacquire mic after screen stop:", err);
-      }
-
-      // --- 3️⃣ Restore camera + mic tracks to peers ---
-      const cameraTrack = this.localStream?.getVideoTracks()[0] || null;
-      Object.values(this.peers).forEach((pc) => {
-        pc.getSenders().forEach((sender) => {
-          if (sender.track?.kind === "video" && cameraTrack) {
-            try { sender.replaceTrack(cameraTrack); } catch (err) { this.log("replaceTrack video failed:", err); }
-          }
-          if (sender.track?.kind === "audio" && micTrack) {
-            try { sender.replaceTrack(micTrack); } catch (err) { this.log("replaceTrack audio failed:", err); }
-          }
-        });
+      // --- 2️⃣ --- FIX --- Remove screen tracks from peers ---
+      // This is much more stable than recreating peers.
+      // It will trigger onnegotiationneeded, and the existing
+      // perfect negotiation logic will handle renegotiating
+      // the connection without the screen tracks.
+      this.log("♻️ Removing screen tracks from all peers...");
+      Object.entries(this.screenSenders).forEach(([peerId, senders]) => {
+        const pc = this.peers[peerId];
+        if (pc) {
+          senders.forEach(sender => {
+            try {
+              if (pc.signalingState !== 'closed') {
+                pc.removeTrack(sender);
+              }
+            } catch (err) {
+              this.log(`Error removing screen track sender for ${peerId}:`, err);
+            }
+          });
+        }
       });
+      this.screenSenders = {}; // Clear the senders list
 
-      // --- 4️⃣ Update localStream with new mic if available ---
-      if (micTrack) {
-        const existingAudios = this.localStream?.getAudioTracks() || [];
-        existingAudios.forEach((t) => { try { t.stop(); } catch { } });
-        if (this.localStream) this.localStream.addTrack(micTrack);
-      }
+      // --- 3️⃣ --- FIX --- Removed all peer recreation, mic re-acquisition,
+      // and track replacement logic. It's unstable and unnecessary.
+      // The `removeTrack` calls above are sufficient to trigger renegotiation.
 
-      // --- 5️⃣ Reset sharing state + broadcast ---
-      this.screenSenders = {};
+      // --- 4️⃣ Reset sharing state + broadcast ---
       this.sharingBy = null;
       this.onSharingBy?.(null);
       this.broadcastDataChannel({
@@ -769,38 +763,7 @@ class WebRTCManager {
         payload: { sharing: false, by: this.userId },
       });
 
-      // --- 6️⃣ Recreate peers safely ---
-      const peersToRecreate = Object.keys(this.peers);
-      this.log("♻️ Recreating peers after screen stop:", peersToRecreate);
-
-      for (const pid of peersToRecreate) {
-        try {
-          const oldPc = this.peers[pid];
-          try { oldPc.close(); } catch { }
-          delete this.peers[pid];
-          const newPc = await this.createPeer(pid, true);
-          this.log("✅ Recreated peer connection for", pid);
-
-          // Send a new offer after short debounce
-          await new Promise(r => setTimeout(r, 200));
-          if (newPc.signalingState === "stable") {
-            const offer = await newPc.createOffer();
-            await newPc.setLocalDescription(offer);
-            this.wsSend({
-              type: "signal",
-              action: "offer",
-              from: this.userId,
-              to: pid,
-              payload: newPc.localDescription,
-            });
-            this.log("📤 Sent fresh offer after screen stop to", pid);
-          }
-        } catch (err) {
-          this.log("stopScreenShare → peer recreate error for", pid, err);
-        }
-      }
-
-      this.log("✅ Screen share fully stopped, mic/camera restored, peers refreshed.");
+      this.log("✅ Screen share fully stopped. Peers will renegotiate.");
     } catch (err) {
       this.log("stopScreenShare error:", err);
     }

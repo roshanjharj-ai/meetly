@@ -1,9 +1,9 @@
 # main.py
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime # NEW: Import datetime
 from typing import List, Dict, Any
 import json
 import os
@@ -58,15 +58,22 @@ async def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/api/signup", response_model=schemas.User)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+def create_user(
+    user: schemas.UserCreate, 
+    background_tasks: BackgroundTasks, # MODIFIED: Add background_tasks
+    db: Session = Depends(get_db)
+):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     usr = crud.create_user(db=db, user=user)
     # MODIFIED: Ensure full_name is passed, falling back to user_name
     full_name = user.full_name if user.full_name else user.user_name
-    asyncio.create_task(
-        email_service.send_signup_email(user.email, user.user_name, full_name)
+    background_tasks.add_task(
+        email_service.send_signup_email, 
+        user.email, 
+        usr.id, # Pass the generated user ID
+        full_name
     )
     return usr
 
@@ -94,11 +101,9 @@ async def update_user_profile(
 @app.post("/api/meetings/validate-join", response_model=schemas.ValidateJoinResponse)
 async def validate_meeting_join_request(
     request: schemas.ValidateJoinRequest,
+    background_tasks: BackgroundTasks, # MODIFIED: Add background_tasks
     db: Session = Depends(get_db)
 ):
-    """
-    Validates if a user is invited to a room and sends a verification code via email.
-    """
     is_invited = crud.is_participant_invited(db, request.room, request.email)
     
     if not is_invited:
@@ -110,9 +115,12 @@ async def validate_meeting_join_request(
     # Generate and store code
     code = verification_service.create_verification_code(request.email, request.room)
 
-    # Send email asynchronously
-    asyncio.create_task(
-        email_service.send_verification_email(request.email, code, request.room)
+    # MODIFIED: Use background_tasks.add_task
+    background_tasks.add_task(
+        email_service.send_verification_email, 
+        request.email, 
+        code, 
+        request.room
     )
 
     return {"message": "Verification code sent to your email."}
@@ -142,21 +150,34 @@ def get_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
     return crud.get_meetings(db, skip=skip, limit=limit)
 
 @app.post("/api/createMeeting", response_model=schemas.Meeting)
-def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
-    # Create the meeting in the DB
-    db_meeting = crud.create_meeting(db=db, meeting=meeting) # MODIFIED
+def create_meeting(
+    meeting: schemas.MeetingCreate, 
+    background_tasks: BackgroundTasks, # MODIFIED: Add background_tasks
+    db: Session = Depends(get_db), 
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_meeting = crud.create_meeting(db=db, meeting=meeting)
     
     # --- NEW: Schedule emails for all participants ---
     if db_meeting and db_meeting.participants:
         print(f"Meeting {db_meeting.id} created, scheduling emails...")
-        schedule_meeting_invites(db_meeting)
+        # MODIFIED: Use background_tasks.add_task
+        # We pass the raw data, not the db_meeting object, to avoid session errors.
+        # list() eagerly loads participants before the session closes.
+        background_tasks.add_task(
+            schedule_meeting_invites,
+            db_meeting.date_time,
+            db_meeting.meeting_link,
+            list(db_meeting.participants) # Pass the *list* of participants
+        )
     
     return db_meeting # MODIFIED
 
 @app.put("/api/updateMeeting/{meeting_id}", response_model=schemas.Meeting)
 def update_meeting_route(
     meeting_id: int,
-    meeting_update: schemas.MeetingCreate, # Using Create schema as it matches client payload
+    meeting_update: schemas.MeetingCreate,
+    background_tasks: BackgroundTasks, # MODIFIED: Add background_tasks
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
@@ -164,10 +185,15 @@ def update_meeting_route(
     if db_meeting is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
     
-    # --- NEW: Schedule emails for all participants ---
     if db_meeting and db_meeting.participants:
         print(f"Meeting {db_meeting.id} updated, scheduling emails...")
-        schedule_meeting_invites(db_meeting)
+        # MODIFIED: Use background_tasks.add_task
+        background_tasks.add_task(
+            schedule_meeting_invites,
+            db_meeting.date_time,
+            db_meeting.meeting_link,
+            list(db_meeting.participants) # Eagerly load participants
+        )
 
     return db_meeting
 
@@ -280,39 +306,41 @@ async def signaling(websocket: WebSocket, room_id: str, user_id: str):
 
 # --- Helper Functions ---
 
-# --- NEW HELPER FUNCTION ---
-def schedule_meeting_invites(db_meeting: models.Meeting):
+# --- MODIFIED HELPER FUNCTION ---
+async def schedule_meeting_invites(
+    meeting_time: datetime, 
+    meeting_link: str, 
+    participants: List[models.Participant]
+):
     """
-    Schedules invitation emails to all participants of a meeting.
-    This runs asyncio.create_task, so it does not block the main thread.
+    Asynchronous helper function to schedule invitation emails.
+    This function is run by BackgroundTasks on the main event loop.
     
     Args:
-        db_meeting: The SQLAlchemy Meeting object, with 'participants' relationship loaded.
+        meeting_time: The datetime object of the meeting.
+        meeting_link: The room ID/link (e.g., "AB-CDEF").
+        participants: A *list* of Participant model objects. 
+                      Must be eagerly loaded before calling this.
     """
     try:
-        # Format the datetime object into a user-friendly string
-        meeting_time_str = db_meeting.date_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+        meeting_time_str = meeting_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
     except Exception:
-        meeting_time_str = str(db_meeting.date_time) # Fallback
+        meeting_time_str = str(meeting_time)
 
-    # Get a simple list of participant names
-    participant_names = [p.name for p in db_meeting.participants]
+    participant_names = [p.name for p in participants]
     
-    # The room_name for the URL is the meeting_link (e.g., "AB-CDEF")
-    room_name = db_meeting.meeting_link 
-    
-    if not room_name:
-        print(f"❌ Cannot send emails for meeting {db_meeting.id}, meeting has no room_name/meeting_link.")
+    if not meeting_link:
+        print(f"❌ Cannot send emails, meeting has no room_name/meeting_link.")
         return
 
-    # Loop through each participant and create a background task to send the email
-    for participant in db_meeting.participants:
-        print(f"Scheduling invite email for {participant.email} for room {room_name}")
+    # This is now running on the main event loop, so asyncio.create_task is safe
+    for participant in participants:
+        print(f"Scheduling invite email for {participant.email} for room {meeting_link}")
         asyncio.create_task(
             email_service.send_meeting_invite(
                 recipient_email=participant.email,
                 recipient_name=participant.name,
-                room_name=room_name,
+                room_name=meeting_link,
                 meeting_time=meeting_time_str,
                 participants=participant_names
             )
