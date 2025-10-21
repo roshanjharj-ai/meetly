@@ -329,87 +329,95 @@ class WebRTCManager {
   }
 
   async handleSignal(msg: SignalMsg) {
-    const { action, from, payload } = msg;
-    if (!from) return;
+  const { action, from, payload } = msg;
+  if (!from) return;
 
-    let pc = this.peers[from];
-    if (!pc && action === "offer") {
-      pc = await this.createPeer(from, false);
-    }
-    if (!pc) {
-      pc = await this.createPeer(from, false);
-    }
+  let pc = this.peers[from];
+  if (!pc && action === "offer") {
+    pc = await this.createPeer(from, false);
+  }
+  if (!pc) {
+    pc = await this.createPeer(from, false);
+  }
 
-    try {
-      if (action === "offer") {
-        this.log("📨 Received offer from", from);
+  // --- polite peer logic (deterministic initiator) ---
+  const polite = this.userId > from;
+  const isOfferCollision = action === "offer" && (pc.signalingState !== "stable" || (pc as any)._makingOffer);
+  if (isOfferCollision && !polite) {
+    this.log("⚠️ Offer collision → ignoring offer from", from, "because not polite");
+    return;
+  }
 
-        // If negotiation is mid-way, recreate peer safely
-        if (pc.signalingState !== "stable") {
-          this.log("⚠️ Received offer while unstable → restarting peer for", from);
-          try { pc.close(); } catch { }
-          delete this.peers[from];
-          pc = await this.createPeer(from, false);
-        }
+  try {
+    if (action === "offer") {
+      (pc as any)._ignoreOffer = !polite && isOfferCollision;
+      this.log("📨 Received offer from", from, "polite:", polite, "collision:", isOfferCollision);
 
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(payload));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          this.wsSend({
-            type: "signal",
-            action: "answer",
-            from: this.userId,
-            to: from,
-            payload: answer,
-          });
-        } catch (err) {
-          this.log("⚠️ handleSignal offer error:", err);
-          if (String(err).includes("m-lines")) {
-            // Retain your existing m-line recovery logic
-            this.log("⚠️ SDP m-line mismatch, recreating peer for", from);
-            try { pc.close(); } catch { }
-            delete this.peers[from];
-            const newPc = await this.createPeer(from, false);
-            const offer = await newPc.createOffer();
-            await newPc.setLocalDescription(offer);
-            this.wsSend({
-              type: "signal",
-              action: "offer",
-              from: this.userId,
-              to: from,
-              payload: offer,
-            });
-          }
-        }
-
-      } else if (action === "answer") {
-        this.log("📨 Received answer from", from);
-        if (pc.signalingState === "have-local-offer") {
-          await pc.setRemoteDescription(new RTCSessionDescription(payload));
-        } else {
-          this.log("⚠️ Ignoring answer; signalingState =", pc.signalingState);
-        }
-
-      } else if (action === "ice" && payload) {
-        // Prevent race condition when remoteDescription isn’t ready yet
-        if (!pc.remoteDescription) {
-          this.log("🕓 Queuing ICE candidate (remoteDescription missing)", from);
-          setTimeout(() => {
-            if (pc.remoteDescription) {
-              pc.addIceCandidate(payload).catch(err => this.log("addIceCandidate failed:", err));
-            } else {
-              this.log("⚠️ Still no remoteDescription, skipping ICE for", from);
-            }
-          }, 300);
-        } else {
-          await pc.addIceCandidate(payload);
-        }
+      if (isOfferCollision && !polite) {
+        this.log("🙈 Non-polite peer ignoring offer, state:", pc.signalingState);
+        return;
       }
-    } catch (err) {
-      this.log(`handleSignal error on action ${action}:`, err);
+
+      // Apply rollback if mid-negotiation
+      if (pc.signalingState !== "stable") {
+        this.log("🔄 Rolling back unstable local description before applying remote offer");
+        try { await pc.setLocalDescription({ type: "rollback" }); } catch {}
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(payload));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      this.wsSend({
+        type: "signal",
+        action: "answer",
+        from: this.userId,
+        to: from,
+        payload: answer,
+      });
+
+    } else if (action === "answer") {
+      this.log("📨 Received answer from", from);
+      if (pc.signalingState === "have-local-offer") {
+        await pc.setRemoteDescription(new RTCSessionDescription(payload));
+      } else {
+        this.log("⚠️ Ignoring answer — invalid state:", pc.signalingState);
+      }
+
+    } else if (action === "ice" && payload) {
+      // Queue ICE until remoteDescription exists
+      if (!pc.remoteDescription) {
+        this.log("🕓 Queuing ICE candidate (no remoteDescription yet) from", from);
+        setTimeout(() => {
+          if (pc.remoteDescription) {
+            pc.addIceCandidate(payload).catch(err => this.log("addIceCandidate error:", err));
+          }
+        }, 300);
+      } else {
+        await pc.addIceCandidate(payload);
+      }
+    }
+  } catch (err) {
+    this.log(`handleSignal error on action ${action}:`, err);
+
+    // Fallback to your m-line mismatch fix
+    if (String(err).includes("m-lines")) {
+      this.log("⚠️ SDP m-line mismatch, recreating peer for", from);
+      try { pc.close(); } catch {}
+      delete this.peers[from];
+      const newPc = await this.createPeer(from, false);
+      const offer = await newPc.createOffer();
+      await newPc.setLocalDescription(offer);
+      this.wsSend({
+        type: "signal",
+        action: "offer",
+        from: this.userId,
+        to: from,
+        payload: offer,
+      });
     }
   }
+}
+
 
 
   private handleDataChannelMessage(ev: MessageEvent, peerId: string) {

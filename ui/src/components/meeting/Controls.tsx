@@ -168,7 +168,6 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
                         />
                         <div className="d-flex align-items-center" style={{ gap: '0.5rem' }}>
                             <MuteButton performAction={performAction} isMuted={isMuted} />
-                            <EndCallButton performAction={performAction} />
                             <div className="position-relative d-flex align-items-center">
                                 <motion.button onClick={() => setMoreMenuOpen(!isMoreMenuOpen)} aria-label="More options" className="control-button"><FiMoreVertical size={22} /></motion.button>
                                 <AnimatePresence>
