@@ -167,7 +167,7 @@ class WebRTCManager {
   async connect(initialAudioEnabled = true, initialVideoEnabled = true) {
     // Avoid duplicate or half-open sockets
     if (this.ws && this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) {
-      this.log("connect() ignored — WebSocket already open.");
+      this.log("connect() ignored � WebSocket already open.");
       return;
     }
 
@@ -177,21 +177,21 @@ class WebRTCManager {
       this.log("Local stream ready at connect():",
         this.localStream?.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
     } catch (err) {
-      this.log("⚠️ ensureLocalStream failed at connect():", err);
+      this.log("?? ensureLocalStream failed at connect():", err);
     }
 
-    this.log("Connecting WebSocket →", this.wsUrl);
+    this.log("Connecting WebSocket ?", this.wsUrl);
     const ws = new WebSocket(this.wsUrl);
     this.ws = ws;
 
     ws.onopen = () => {
-      this.log("✅ WebSocket open:", this.wsUrl);
+      this.log("? WebSocket open:", this.wsUrl);
     };
     ws.onerror = (ev) => {
-      this.log("❌ WebSocket error:", ev);
+      this.log("? WebSocket error:", ev);
     };
     ws.onclose = (ev) => {
-      this.log("🔌 WebSocket closed:", ev.reason || ev.code);
+      this.log("?? WebSocket closed:", ev.reason || ev.code);
       this.ws = null;
     };
     ws.onmessage = async (evt) => {
@@ -206,9 +206,9 @@ class WebRTCManager {
 
   // --- inside class WebRTCManager ---
   disconnect() {
-    this.log("🔴 Disconnect called for user:", this.userId);
+    this.log("?? Disconnect called for user:", this.userId);
 
-    // --- 1️⃣ Stop all local media tracks ---
+    // --- 1?? Stop all local media tracks ---
     if (this.localStream) {
       this.log("Stopping local media tracks...");
       this.localStream.getTracks().forEach((track) => {
@@ -230,7 +230,7 @@ class WebRTCManager {
       this.localStream = null;
     }
 
-    // --- 2️⃣ Stop screen share stream (if any) ---
+    // --- 2?? Stop screen share stream (if any) ---
     if (this.screenStream) {
       this.log("Stopping screen share tracks...");
       this.screenStream.getTracks().forEach((track) => {
@@ -239,7 +239,7 @@ class WebRTCManager {
       this.screenStream = null;
     }
 
-    // --- 3️⃣ Close audio context / analyser if used (releases mic lock in mobile) ---
+    // --- 3?? Close audio context / analyser if used (releases mic lock in mobile) ---
     try {
       if (typeof (window as any).audioContextRef !== "undefined") {
         const ctx = (window as any).audioContextRef;
@@ -253,15 +253,17 @@ class WebRTCManager {
       this.log("Error closing audio context:", err);
     }
 
-    // --- 4️⃣ Close all peer connections cleanly ---
+    // --- 4?? Close all peer connections cleanly ---
     this.log("Closing peer connections...");
     Object.entries(this.peers).forEach(([pid, pc]) => {
       try {
         console.log("Closing peer connection for", pid);
+        // stop senders' tracks
         pc.getSenders().forEach((s) => {
           try { if (s.track) { s.track.stop(); } } catch { }
           try { s.replaceTrack(null); } catch { }
         });
+        // stop receivers' tracks
         pc.getReceivers().forEach((r) => {
           try { r.track?.stop(); } catch { }
         });
@@ -273,7 +275,7 @@ class WebRTCManager {
     this.screenSenders = {};
     this.creatingPeer = {};
 
-    // --- 5️⃣ Close WebSocket ---
+    // --- 5?? Close WebSocket ---
     if (this.ws) {
       try {
         if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
@@ -283,7 +285,7 @@ class WebRTCManager {
       this.ws = null;
     }
 
-    // --- 6️⃣ Notify UI and clear callbacks ---
+    // --- 6?? Notify UI and clear callbacks ---
     this.onLocalStream?.(null);
     this.onRemoteStream?.("", null);
     this.onRemoteScreen?.("", null);
@@ -291,7 +293,7 @@ class WebRTCManager {
     this.onUsers?.([]);
     this.onUsersCount?.(0);
 
-    this.log("✅ All devices and connections released.");
+    this.log("? All devices and connections released.");
   }
 
 
@@ -316,6 +318,7 @@ class WebRTCManager {
               continue;
             }
             const isBot = DEFAULT_BOT_NAMES.includes(peerId);
+            // Deterministic initiator rule (consistent on both sides): smaller id initiates
             const initiator = isBot || this.userId < peerId;
             this.createPeer(peerId, initiator);
           }
@@ -335,6 +338,7 @@ class WebRTCManager {
     }
   }
 
+  // Improved handleSignal implementing the Perfect Negotiation pattern and queued ICE
   async handleSignal(msg: SignalMsg) {
     const { action, from, payload } = msg;
     if (!from) return;
@@ -365,17 +369,17 @@ class WebRTCManager {
 
     const isOfferCollision = action === 'offer' && (pc.signalingState !== 'stable' || pc._makingOffer);
     if (isOfferCollision && !polite) {
-      this.log("⚠️ Offer collision → ignoring offer from", from, "because not polite");
+      this.log('?? Offer collision ? ignoring offer from', from, 'because not polite');
       return;
     }
 
     try {
       if (action === 'offer') {
         pc._ignoreOffer = !polite && isOfferCollision;
-        this.log("📨 Received offer from", from, "polite:", polite, "collision:", isOfferCollision);
+        this.log('?? Received offer from', from, 'polite:', polite, 'collision:', isOfferCollision);
 
         if (isOfferCollision && !polite) {
-          this.log("🙈 Non-polite peer ignoring offer, state:", pc.signalingState);
+          this.log('?? Non-polite peer ignoring offer, state:', pc.signalingState);
           return;
         }
 
@@ -419,7 +423,7 @@ class WebRTCManager {
             }
           }
         } else {
-          this.log('?? Ignoring answer — invalid state:', pc.signalingState);
+          this.log('?? Ignoring answer � invalid state:', pc.signalingState);
         }
 
       } else if (action === 'ice' && payload) {
@@ -438,7 +442,7 @@ class WebRTCManager {
       // Fallback to your m-line mismatch fix
       if (String(err).includes('m-lines')) {
         this.log('?? SDP m-line mismatch, recreating peer for', from);
-        try { pc.close(); } catch { }
+        try { pc.close(); } catch {}
         delete this.peers[from];
         const newPc = await this.createPeer(from, false);
         const offer = await newPc.createOffer();
@@ -481,7 +485,7 @@ class WebRTCManager {
   async createPeer(targetId: string, initiator: boolean): Promise<RTCPeerConnection & any> {
     if (this.peers[targetId] || this.creatingPeer[targetId]) return this.peers[targetId];
     this.creatingPeer[targetId] = true;
-    this.log("🧩 createPeer →", targetId, "initiator:", initiator);
+    this.log("?? createPeer ?", targetId, "initiator:", initiator);
 
     const pc: RTCPeerConnection & any = new RTCPeerConnection(this.iceConfig) as any;
     // initialize internal flags
@@ -492,9 +496,10 @@ class WebRTCManager {
     pc._iceRestartTimer = null;
 
     this.peers[targetId] = pc;
+    let localMakingOffer = false;
 
     // ICE candidates
-    pc.onicecandidate = (e: any) => {
+    pc.onicecandidate = (e) => {
       if (e.candidate) {
         this.wsSend({
           type: "signal",
@@ -551,22 +556,22 @@ class WebRTCManager {
     // Data channel setup
     if (initiator) {
       const dc = pc.createDataChannel("datachannel");
-      dc.onmessage = (ev: any) => this.handleDataChannelMessage(ev, targetId);
+      dc.onmessage = (ev) => this.handleDataChannelMessage(ev, targetId);
       this.dataChannels[targetId] = dc;
     } else {
-      pc.ondatachannel = (e: any) => {
+      pc.ondatachannel = (e) => {
         this.dataChannels[targetId] = e.channel;
-        e.channel.onmessage = (msg: any) => this.handleDataChannelMessage(msg, targetId);
+        e.channel.onmessage = (msg) => this.handleDataChannelMessage(msg, targetId);
       };
     }
 
     // Attach local media
     this.attachLocalTracks(pc);
-    this.log("🎧 Attached local tracks →", targetId, this.localStream?.getTracks().length || 0);
+    this.log("?? Attached local tracks ?", targetId, this.localStream?.getTracks().length || 0);
 
     // Handle remote streams
-    pc.ontrack = (evt: any) => {
-      this.log("📡 ontrack from", targetId, evt.track.kind, evt.streams.length);
+    pc.ontrack = (evt) => {
+      this.log("?? ontrack from", targetId, evt.track.kind, evt.streams.length);
       const stream = evt.streams[0];
       if (evt.track.kind === "video" && this.sharingBy === targetId) {
         this.onRemoteScreen?.(targetId, stream);
@@ -575,7 +580,7 @@ class WebRTCManager {
       }
     };
 
-    // Negotiation guard
+    // Negotiation guard implementing perfect negotiation
     pc.onnegotiationneeded = async () => {
       if (pc._makingOffer || pc.signalingState !== "stable") {
         this.log("? Skip negotiation (busy or unstable) for", targetId);
@@ -583,7 +588,7 @@ class WebRTCManager {
       }
       pc._makingOffer = true;
       try {
-        this.log("🔁 onnegotiationneeded → offer to", targetId);
+        this.log("?? onnegotiationneeded ? offer to", targetId);
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         this.wsSend({
@@ -599,6 +604,8 @@ class WebRTCManager {
         pc._makingOffer = false;
       }
     };
+
+    // Handle incoming offers/answers/ice for this peer via ws message handler (handled in handleSignal)
 
     // Initial offer for initiators
     if (initiator) {
@@ -623,7 +630,6 @@ class WebRTCManager {
     delete this.creatingPeer[targetId];
     return pc;
   }
-
 
 
   // Replace audio/video track across all peer connections and update localStream
@@ -717,9 +723,9 @@ class WebRTCManager {
     if (!this.screenStream) return;
 
     try {
-      this.log("🛑 Stopping screen share...");
+      this.log("?? Stopping screen share...");
 
-      // --- 1️⃣ Stop screen tracks cleanly ---
+      // --- 1?? Stop screen tracks cleanly ---
       this.screenStream.getTracks().forEach((track) => {
         try {
           track.stop();
@@ -730,10 +736,10 @@ class WebRTCManager {
       });
       this.screenStream = null;
 
-      // --- 2️⃣ Restore camera video track if available ---
+      // --- 2?? Restore camera video track if available ---
       const cameraTrack = this.localStream?.getVideoTracks()[0] || null;
       if (cameraTrack) {
-        this.log("🎥 Restoring camera track to peers...");
+        this.log("?? Restoring camera track to peers...");
         Object.values(this.peers).forEach((pc) => {
           const senders = pc.getSenders().filter((s) => s.track?.kind === "video");
           senders.forEach((sender) => {
@@ -745,10 +751,10 @@ class WebRTCManager {
           });
         });
       } else {
-        this.log("⚠️ No camera track found to restore after screen share stop.");
+        this.log("?? No camera track found to restore after screen share stop.");
       }
 
-      // --- 3️⃣ Reset sharing state and broadcast update ---
+      // --- 3?? Reset sharing state and broadcast update ---
       this.screenSenders = {};
       this.sharingBy = null;
       this.onSharingBy?.(null);
@@ -757,9 +763,9 @@ class WebRTCManager {
         payload: { sharing: false, by: this.userId },
       });
 
-      // --- 4️⃣ Safely rebuild peers to prevent SDP order mismatch ---
+      // --- 4?? Safely rebuild peers to prevent SDP order mismatch ---
       const peersToRecreate = Object.keys(this.peers);
-      this.log("♻️ Recreating peers after screen stop:", peersToRecreate);
+      this.log("?? Recreating peers after screen stop:", peersToRecreate);
 
       for (const pid of peersToRecreate) {
         try {
@@ -769,15 +775,15 @@ class WebRTCManager {
 
           // --- Safe recreate with negotiation guard ---
           const newPc = await this.createPeer(pid, true);
-          this.log("✅ Recreated peer connection for", pid);
+          this.log("? Recreated peer connection for", pid);
 
           // --- Ensure audio continuity ---
           const audioTrack = this.localStream?.getAudioTracks()[0];
           if (audioTrack) {
-            const sender = newPc.getSenders().find((s: any) => s.track?.kind === "audio");
+            const sender = newPc.getSenders().find((s) => s.track?.kind === "audio");
             if (!sender) {
               newPc.addTrack(audioTrack, this.localStream!);
-              this.log("🎧 Reattached audio track for", pid);
+              this.log("?? Reattached audio track for", pid);
             }
           }
 
@@ -792,17 +798,17 @@ class WebRTCManager {
               to: pid,
               payload: newPc.localDescription,
             });
-            this.log("📤 Sent new offer after screen stop to", pid);
+            this.log("?? Sent new offer after screen stop to", pid);
           } else {
-            this.log("⚠️ Skipped offer — signaling not stable for", pid);
+            this.log("?? Skipped offer � signaling not stable for", pid);
           }
 
         } catch (err) {
-          this.log("stopScreenShare → peer recreate error for", pid, err);
+          this.log("stopScreenShare ? peer recreate error for", pid, err);
         }
       }
 
-      this.log("✅ Screen share fully stopped, peers refreshed.");
+      this.log("? Screen share fully stopped, peers refreshed.");
     } catch (err) {
       this.log("stopScreenShare error:", err);
     }
