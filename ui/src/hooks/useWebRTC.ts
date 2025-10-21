@@ -158,31 +158,42 @@ class WebRTCManager {
     }
   }
 
-  async connect(initialAudioEnabled: boolean = true, initialVideoEnabled: boolean = true) {
-    try {
-      // Pass initial state down and make sure localStream is attempted
-      try {
-        await this.ensureLocalStream(initialAudioEnabled, initialVideoEnabled);
-      } catch (err) {
-        this.log("Could not get initial media stream, proceeding without it.", err);
-      }
-    } catch (err) {
-      // no-op
+  async connect(initialAudioEnabled = true, initialVideoEnabled = true) {
+    // Avoid duplicate or half-open sockets
+    if (this.ws && this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) {
+      this.log("connect() ignored — WebSocket already open.");
+      return;
     }
 
-    this.log("Connecting to WS:", this.wsUrl);
+    // Ensure local stream exists before peers connect
+    try {
+      await this.ensureLocalStream(initialAudioEnabled, initialVideoEnabled);
+      this.log("Local stream ready at connect():",
+        this.localStream?.getTracks().map(t => `${t.kind}:${t.enabled}:${t.readyState}`));
+    } catch (err) {
+      this.log("⚠️ ensureLocalStream failed at connect():", err);
+    }
+
+    this.log("Connecting WebSocket →", this.wsUrl);
     const ws = new WebSocket(this.wsUrl);
     this.ws = ws;
 
-    ws.onopen = () => this.log("WebSocket open:", this.wsUrl);
-    ws.onerror = (ev) => this.log("WebSocket error", ev);
-    ws.onclose = (ev) => this.log("WebSocket closed", ev);
+    ws.onopen = () => {
+      this.log("✅ WebSocket open:", this.wsUrl);
+    };
+    ws.onerror = (ev) => {
+      this.log("❌ WebSocket error:", ev);
+    };
+    ws.onclose = (ev) => {
+      this.log("🔌 WebSocket closed:", ev.reason || ev.code);
+      this.ws = null;
+    };
     ws.onmessage = async (evt) => {
       try {
-        const msg: SignalMsg = JSON.parse(evt.data);
+        const msg = JSON.parse(evt.data);
         await this.onWsMessage(msg);
       } catch (err) {
-        this.log("WS parse error", err);
+        this.log("WS message parse error:", err);
       }
     };
   }
@@ -329,22 +340,45 @@ class WebRTCManager {
   }
 
   async createPeer(targetId: string, initiator: boolean): Promise<RTCPeerConnection> {
-    if (this.peers[targetId] || this.creatingPeer[targetId]) return this.peers[targetId];
+    if (this.peers[targetId] || this.creatingPeer[targetId]) {
+      return this.peers[targetId];
+    }
     this.creatingPeer[targetId] = true;
+    this.log("🧩 createPeer →", targetId, "initiator:", initiator);
 
     const pc = new RTCPeerConnection(this.iceConfig);
 
-    pc.onicecandidate = e => { if (e.candidate) this.wsSend({ type: "signal", action: "ice", from: this.userId, to: targetId, payload: e.candidate }); };
-    pc.ontrack = evt => {
-      const stream = evt.streams[0];
-      if (evt.track.kind === 'video' && this.sharingBy && this.sharingBy === targetId) {
-        this.onRemoteScreen?.(targetId, stream);
-      } else {
-        this.onRemoteStream?.(targetId, stream);
+    // --- Event hooks ---
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        this.wsSend({ type: "signal", action: "ice", from: this.userId, to: targetId, payload: e.candidate });
       }
     };
+
+    pc.oniceconnectionstatechange = () => {
+      this.log("ICE state", targetId, pc.iceConnectionState);
+      if (["failed", "disconnected"].includes(pc.iceConnectionState)) {
+        try {
+          if ((pc as any).restartIce) {
+            this.log("🌀 Restarting ICE for", targetId);
+            (pc as any).restartIce();
+          } else {
+            this.log("Recreating peer for", targetId);
+            setTimeout(() => {
+              try { pc.close(); } catch { }
+              delete this.peers[targetId];
+              this.createPeer(targetId, true).catch(e => this.log("recreatePeer error:", e));
+            }, 700);
+          }
+        } catch (err) {
+          this.log("ICE restart error:", err);
+        }
+      }
+    };
+
     pc.onconnectionstatechange = () => {
-      if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
+      this.log("Conn state", targetId, pc.connectionState);
+      if (["failed", "closed"].includes(pc.connectionState)) {
         this.onRemoteStream?.(targetId, null);
         this.onRemoteScreen?.(targetId, null);
         try { pc.close(); } catch { }
@@ -352,30 +386,79 @@ class WebRTCManager {
       }
     };
 
+    // ensure local stream exists BEFORE adding tracks
+    try {
+      if (!this.localStream) {
+        await this.ensureLocalStream(this.initialAudioEnabled, this.initialVideoEnabled);
+        this.log("Local stream ensured in createPeer", targetId);
+      }
+    } catch (err) {
+      this.log("ensureLocalStream failed in createPeer:", err);
+    }
+
+    // --- DataChannel ---
     if (initiator) {
       const dc = pc.createDataChannel("datachannel");
       dc.onmessage = (ev) => this.handleDataChannelMessage(ev, targetId);
       this.dataChannels[targetId] = dc;
     } else {
-      pc.ondatachannel = e => {
+      pc.ondatachannel = (e) => {
         this.dataChannels[targetId] = e.channel;
         e.channel.onmessage = (msg) => this.handleDataChannelMessage(msg, targetId);
       };
     }
 
-    // Add local tracks (if available)
+    // --- Attach local tracks ---
     this.attachLocalTracks(pc);
+    this.log("🎧 Attached local tracks →", targetId, this.localStream?.getTracks().length || 0);
 
+    // --- Track handler for remote streams ---
+    pc.ontrack = (evt) => {
+      this.log("📡 ontrack from", targetId, evt.track.kind, evt.streams.length);
+      const stream = evt.streams[0];
+      if (evt.track.kind === "video" && this.sharingBy === targetId) {
+        this.onRemoteScreen?.(targetId, stream);
+      } else {
+        this.onRemoteStream?.(targetId, stream);
+      }
+    };
+
+    // --- Auto renegotiation when needed ---
+    pc.onnegotiationneeded = async () => {
+      try {
+        this.log("onnegotiationneeded → offer to", targetId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        this.wsSend({
+          type: "signal",
+          action: "offer",
+          from: this.userId,
+          to: targetId,
+          payload: pc.localDescription,
+        });
+      } catch (err) {
+        this.log("negotiationneeded error:", err);
+      }
+    };
+
+    // --- Create and send initial offer if initiator ---
     if (initiator) {
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        this.wsSend({ type: "signal", action: "offer", from: this.userId, to: targetId, payload: pc.localDescription });
+        this.wsSend({
+          type: "signal",
+          action: "offer",
+          from: this.userId,
+          to: targetId,
+          payload: pc.localDescription,
+        });
       } catch (err) {
-        this.log("createOffer failed", err);
+        this.log("initial offer error:", err);
       }
     }
 
+    // store and mark ready
     this.peers[targetId] = pc;
     delete this.creatingPeer[targetId];
     return pc;
