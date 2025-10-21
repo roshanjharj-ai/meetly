@@ -62,7 +62,7 @@ class WebRTCManager {
     _queuedCandidates?: RTCIceCandidateInit[];
     _polite?: boolean;
     _iceRestartTimer?: number | null;
-    _negotiationTimer?: number | null; // --- FIX B: Add timer property for debouncing
+    _negotiationTimer?: number | null; 
   }> = {};
   dataChannels: Record<string, RTCDataChannel> = {};
   localStream: MediaStream | null = null;
@@ -76,7 +76,6 @@ class WebRTCManager {
   pendingScreen: string | null = null;
   lastUserList: string[] = [];
 
-  // --- FIX A: Add guard flag for idempotent disconnect ---
   private isDisconnected = false;
 
   onProgressUpdate?: (p: MeetingProgress) => void;
@@ -169,7 +168,6 @@ class WebRTCManager {
       return;
     }
     
-    // --- FIX A: Reset disconnect flag on new connection ---
     this.isDisconnected = false;
 
     try {
@@ -205,17 +203,12 @@ class WebRTCManager {
   }
 
   disconnect() {
-    // --- FIX A: Make disconnect idempotent ---
-    // This prevents multiple calls (from React StrictMode, HMR, or user navigation)
-    // from trying to stop/close resources that are already gone,
-    // which is a primary cause of resource leaks.
     if (this.isDisconnected) {
       this.log("⚠️ Disconnect called, but already disconnected.");
       return;
     }
     this.isDisconnected = true;
     this.log("🔴 Disconnect called for user:", this.userId);
-    // --- End FIX A ---
 
     if (this.localStream) {
       this.log("Stopping local media tracks...");
@@ -262,7 +255,6 @@ class WebRTCManager {
       try {
         this.log("Closing peer connection for", pid);
 
-        // --- FIX A & B: Clear any pending negotiation timers ---
         if (pc._negotiationTimer) {
           window.clearTimeout(pc._negotiationTimer);
         }
@@ -357,8 +349,6 @@ class WebRTCManager {
         delete this.creatingPeer[from];
       }
     }
-    // --- FIX B: Check if peer still exists ---
-    // It might have been closed by the m-line error handler
     if (!pc || pc.signalingState === 'closed') {
         this.log("? handleSignal: Peer not found or closed, ignoring signal", action, from);
         return;
@@ -440,10 +430,6 @@ class WebRTCManager {
     } catch (err) {
       this.log(`handleSignal error on action ${action}:`, err);
 
-      // --- FIX B: Handle m-line error by safely closing the peer ---
-      // Recreating the peer here was causing *more* m-line errors.
-      // The safest action is to close this broken peer. The 'user_list'
-      // logic will detect the missing peer and rebuild it cleanly.
       if (String(err).includes('m-lines')) {
         this.log('❌ FATAL: SDP m-line mismatch. Closing broken peer for', from);
         try { pc.close(); } catch { }
@@ -488,7 +474,7 @@ class WebRTCManager {
     pc._queuedCandidates = [];
     pc._polite = !(this.userId < targetId);
     pc._iceRestartTimer = null;
-    pc._negotiationTimer = null; // --- FIX B: Initialize timer
+    pc._negotiationTimer = null; 
 
     this.peers[targetId] = pc;
 
@@ -525,8 +511,7 @@ class WebRTCManager {
 
     pc.onconnectionstatechange = () => {
       this.log("Conn state", targetId, pc.connectionState);
-      if (["failed", "closed"].E.includes(pc.connectionState)) {
-        // --- FIX A: Clear negotiation timer on close ---
+      if (["failed", "closed"].includes(pc.connectionState)) {
         if (pc._negotiationTimer) {
           window.clearTimeout(pc._negotiationTimer);
         }
@@ -570,24 +555,18 @@ class WebRTCManager {
       }
     };
 
-    // --- FIX B: Debounce onnegotiationneeded ---
-    // This is the most critical fix. It prevents the "m-line" errors and
-    // negotiation loops by "coalescing" multiple rapid-fire events
-    // (like adding/removing screen share tracks) into a single, stable
-    // negotiation event after a short delay.
     pc.onnegotiationneeded = async () => {
       if (pc._negotiationTimer) {
         window.clearTimeout(pc._negotiationTimer);
       }
       pc._negotiationTimer = window.setTimeout(async () => {
-        pc._negotiationTimer = null; // Clear timer
+        pc._negotiationTimer = null; 
 
         if (pc._makingOffer || pc.signalingState !== "stable" || pc._ignoreOffer) {
           this.log(`? Skip negotiation (busy, unstable, or ignoring) for ${targetId}. State: ${pc.signalingState}, MakingOffer: ${pc._makingOffer}, IgnoreOffer: ${pc._ignoreOffer}`);
           return;
         }
         
-        // Check for closed state *again* just in case
         if (pc.signalingState === 'closed') {
             this.log(`? Skip negotiation (peer closed) for ${targetId}`);
             return;
@@ -598,7 +577,6 @@ class WebRTCManager {
           this.log("🔁 onnegotiationneeded → offer to", targetId);
           const offer = await pc.createOffer();
 
-          // After await, check state again in case a remote offer arrived
           if (pc.signalingState !== "stable") {
             this.log(`? Skip negotiation (state changed mid-offer) for ${targetId}`);
             return;
@@ -619,9 +597,12 @@ class WebRTCManager {
         }
       }, 100); // 100ms debounce
     };
-    // --- End FIX B ---
 
-
+    // --- THIS BLOCK IS THE BUG ---
+    // This manual offer races with the onnegotiationneeded handler.
+    // By removing it, we let onnegotiationneeded (which is debounced)
+    // become the *only* source of offers, fixing the race condition.
+    /*
     if (initiator) {
       try {
         pc._makingOffer = true;
@@ -640,6 +621,8 @@ class WebRTCManager {
         pc._makingOffer = false;
       }
     }
+    */
+    // --- END OF FIX ---
 
     delete this.creatingPeer[targetId];
     return pc;
@@ -714,7 +697,6 @@ class WebRTCManager {
       Object.entries(this.peers).forEach(([peerId, pc]) => {
         const senders: RTCRtpSender[] = [];
         displayStream.getTracks().forEach((track: any) => {
-          // --- FIX B: Check for closed peer before adding track ---
           if (pc.signalingState === 'closed') return;
           const sender = pc.addTrack(track, displayStream);
           if (sender) senders.push(sender);
@@ -930,31 +912,25 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   }, [room]);
 
   const connect = useCallback(async (initialAudioEnabled: boolean = true, initialVideoEnabled: boolean = true) => {
-    if (!mgrRef.current) return;
+    if (!mgrRef.current) {
+       // This should ideally not be hit if useEffect runs first, but as a safeguard:
+       mgrRef.current = new WebRTCManager(room, userId, signalingBase);
+    }
     try {
-      // --- FIX A: Call connect on the manager ---
-      // We also need to reset the ref if it's null, which the useEffect does.
-      // But we should ensure we *create* it if it's null.
-      if (!mgrRef.current) {
-         mgrRef.current = new WebRTCManager(room, userId, signalingBase);
-         // Re-run setup logic from useEffect? No, useEffect will handle it.
-         // This is tricky. Let's assume useEffect has run.
-      }
       await mgrRef.current.connect(initialAudioEnabled, initialVideoEnabled);
       setLocalStream(mgrRef.current.localStream);
     } catch (err) {
       console.error("Connect error:", err);
     }
-  }, [room, userId, signalingBase]); // --- FIX A: Add dependencies
+  }, [room, userId, signalingBase]);
 
   useEffect(() => {
     if (!localStream) return;
     let audioCtx: AudioContext | null = null, analyser: AnalyserNode | null = null, micSource: MediaStreamAudioSourceNode | null = null, rafId: number;
     const startVAD = async () => {
       try {
-        // --- FIX A: Check if localStream still has audio tracks ---
         if (localStream.getAudioTracks().length === 0) {
-            this.log("VAD: No audio tracks found, skipping.");
+            console.log("[useWebRTC] VAD: No audio tracks found, skipping.");
             return;
         }
         audioCtx = new AudioContext();
@@ -993,8 +969,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     console.log("[useWebRTC disconnect] Hook disconnect called.");
     if (mgrRef.current) {
       mgrRef.current.disconnect();
-      // --- FIX A: Don't nullify the ref here, let the useEffect cleanup handle it ---
-      // mgrRef.current = null; 
       setLocalStream(null);
       setUsers([]);
       setRemoteStreams({});
