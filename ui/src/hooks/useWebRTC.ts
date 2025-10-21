@@ -86,7 +86,16 @@ class WebRTCManager {
   // New callback to inform when localStream is created/updated
   onLocalStream?: (s: MediaStream | null) => void;
 
-  iceConfig: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+  iceConfig: RTCConfiguration = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      {
+        urls: "turn:relay.metered.ca:80",
+        username: "openai",
+        credential: "openai",
+      },
+    ]
+  };
 
   private initialAudioEnabled: boolean = true;
   private initialVideoEnabled: boolean = true;
@@ -182,22 +191,22 @@ class WebRTCManager {
     this.log("?? Manager disconnect initiated");
 
     const stopMediaStream = (stream: MediaStream | null, streamName: string) => {
-        if (stream) {
-            this.log(`Stopping ${streamName} tracks...`);
-            let stoppedCount = 0;
-            stream.getTracks().forEach((track) => {
-                if (track.readyState === 'live') {
-                    track.stop();
-                    stoppedCount++;
-                    this.log(`Stopped ${streamName} track: ${track.kind} (${track.label || track.id})`);
-                }
-            });
-            this.log(`${stoppedCount} ${streamName} tracks stopped.`);
-            return null;
-        } else {
-            this.log(`No active ${streamName} to stop.`);
-            return null;
-        }
+      if (stream) {
+        this.log(`Stopping ${streamName} tracks...`);
+        let stoppedCount = 0;
+        stream.getTracks().forEach((track) => {
+          if (track.readyState === 'live') {
+            track.stop();
+            stoppedCount++;
+            this.log(`Stopped ${streamName} track: ${track.kind} (${track.label || track.id})`);
+          }
+        });
+        this.log(`${stoppedCount} ${streamName} tracks stopped.`);
+        return null;
+      } else {
+        this.log(`No active ${streamName} to stop.`);
+        return null;
+      }
     };
 
     // 1. Stop local media tracks FIRST
@@ -209,13 +218,13 @@ class WebRTCManager {
     Object.keys(this.peers).forEach(peerId => {
       try {
         this.peers[peerId].close();
-      } catch {}
+      } catch { }
     });
     this.peers = {}; this.dataChannels = {}; this.screenSenders = {}; this.sharingBy = null;
 
     // 3. Close WebSocket connection
     if (this.ws && this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) {
-      try { this.ws.close(); } catch {}
+      try { this.ws.close(); } catch { }
     }
     this.ws = null;
 
@@ -338,7 +347,7 @@ class WebRTCManager {
       if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
         this.onRemoteStream?.(targetId, null);
         this.onRemoteScreen?.(targetId, null);
-        try { pc.close(); } catch {}
+        try { pc.close(); } catch { }
         delete this.peers[targetId];
       }
     };
@@ -390,10 +399,10 @@ class WebRTCManager {
 
       // Update localStream: remove old audio tracks and add new one
       if (this.localStream) {
-        this.localStream.getAudioTracks().forEach(t => { try { t.stop(); } catch {} });
+        this.localStream.getAudioTracks().forEach(t => { try { t.stop(); } catch { } });
         if (newTrack) this.localStream.addTrack(newTrack);
       } else if (newStream) {
-        this.localStream = new MediaStream([ ...(newStream.getTracks()) ]);
+        this.localStream = new MediaStream([...(newStream.getTracks())]);
       }
 
       // Inform listeners
@@ -418,10 +427,10 @@ class WebRTCManager {
       });
 
       if (this.localStream) {
-        this.localStream.getVideoTracks().forEach(t => { try { t.stop(); } catch {} });
+        this.localStream.getVideoTracks().forEach(t => { try { t.stop(); } catch { } });
         if (newTrack) this.localStream.addTrack(newTrack);
       } else if (newStream) {
-        this.localStream = new MediaStream([ ...(newStream.getTracks()) ]);
+        this.localStream = new MediaStream([...(newStream.getTracks())]);
       }
 
       this.onLocalStream?.(this.localStream);
@@ -468,7 +477,7 @@ class WebRTCManager {
       const pc = this.peers[peerId];
       if (pc) {
         senders.forEach(sender => {
-          try { pc.removeTrack(sender); } catch {}
+          try { pc.removeTrack(sender); } catch { }
         });
       }
     });
@@ -680,18 +689,18 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const disconnect = useCallback(() => {
     console.log("[useWebRTC disconnect] Hook disconnect called.");
     if (mgrRef.current) {
-        mgrRef.current.disconnect();
-        setLocalStream(null);
-        setUsers([]);
-        setRemoteStreams({});
-        setRemoteScreens({});
-        setSharingBy(null);
-        setPeerStatus({});
-        setIsScreenSharing(false);
-        setSpeaking(false);
-        console.log("[useWebRTC disconnect] Local state reset.");
+      mgrRef.current.disconnect();
+      setLocalStream(null);
+      setUsers([]);
+      setRemoteStreams({});
+      setRemoteScreens({});
+      setSharingBy(null);
+      setPeerStatus({});
+      setIsScreenSharing(false);
+      setSpeaking(false);
+      console.log("[useWebRTC disconnect] Local state reset.");
     } else {
-        console.warn("[useWebRTC disconnect] Manager ref already null.");
+      console.warn("[useWebRTC disconnect] Manager ref already null.");
     }
   }, []);
   const startScreenShare = useCallback(async (audioMode: "none" | "mic" | "system" = "none") => { await mgrRef.current?.startScreenShare(audioMode); setIsScreenSharing(true); }, []);
