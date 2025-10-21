@@ -76,7 +76,7 @@ class WebRTCManager {
   pendingScreen: string | null = null;
   lastUserList: string[] = [];
 
-  // --- FIX A: Add guard flag for idempotent disconnect + allowReconnect helper ---
+  // --- FIX A: Add guard flag for idempotent disconnect ---
   private isDisconnected = false;
 
   onProgressUpdate?: (p: MeetingProgress) => void;
@@ -239,6 +239,7 @@ class WebRTCManager {
       try {
         Object.entries(this.peers).forEach(([peerId, pc]) => {
           try {
+            console.log("Removing tracks from peer connection senders for", peerId);
             pc.getSenders().forEach((s: RTCRtpSender) => {
               try {
                 if (s && typeof s.replaceTrack === "function") {
@@ -263,7 +264,7 @@ class WebRTCManager {
         } catch (e) { /* ignore */ }
       }
 
-      // Stop screen tracks if any
+      // stop screen tracks if any
       if (this.screenStream) {
         try {
           this.screenStream.getTracks().forEach((t) => {
@@ -941,6 +942,9 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const [speakers, setSpeakers] = useState<Record<string, boolean>>({});
   const [meetingProgress, setMeetingProgress] = useState<MeetingProgress | null>(null);
 
+  // Manage hidden audio elements for remote streams so playback is attempted automatically
+  const remoteAudioEls = useRef<Record<string, HTMLAudioElement>>({});
+
   useEffect(() => {
     if (!mgrRef.current) {
       mgrRef.current = new WebRTCManager(room, userId, signalingBase);
@@ -950,6 +954,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     mgr.onUsers = setUsers;
     mgr.onLocalStream = (s) => setLocalStream(s);
 
+    // ------------ Remote stream handling with automatic audio playback ------------
     mgr.onRemoteStream = (peerId, stream) => {
       setRemoteStreams(prev => {
         const newState = { ...prev };
@@ -960,18 +965,114 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
         }
         return newState;
       });
+
+      // Create / manage an <audio> element when a remote stream with audio arrives.
+      try {
+        // If stream is null -> cleanup
+        if (!stream) {
+          // remove audio element
+          const existing = remoteAudioEls.current[peerId];
+          if (existing) {
+            try { existing.pause(); } catch { }
+            try { existing.srcObject = null; } catch { }
+            try { existing.remove(); } catch { }
+            delete remoteAudioEls.current[peerId];
+          }
+          return;
+        }
+
+        // Only create audio element if stream has audio tracks (non-screen)
+        const hasAudio = stream.getAudioTracks().length > 0;
+        if (!hasAudio) return;
+
+        // If an audio element already exists for this peer, update srcObject
+        let audioEl = remoteAudioEls.current[peerId];
+        if (!audioEl) {
+          audioEl = document.createElement("audio");
+          // Keep element out of layout
+          audioEl.style.position = "fixed";
+          audioEl.style.left = "-9999px";
+          audioEl.style.width = "1px";
+          audioEl.style.height = "1px";
+          audioEl.autoplay = true;
+          // playsInline helps on mobile (iOS)
+          audioEl.setAttribute("playsinline", "true");
+          audioEl.muted = false; // prefer audible; we will fallback to muted play if autoplay blocked
+          audioEl.preload = "auto";
+          // Some UAs require `muted` to be true to autoplay with sound; we'll try play and handle errors
+          remoteAudioEls.current[peerId] = audioEl;
+          try { document.body.appendChild(audioEl); } catch (e) { /* If DOM not ready, ignore */ }
+        }
+
+        if (audioEl.srcObject !== stream) {
+          audioEl.srcObject = stream;
+        }
+
+        // Try to play. If autoplay blocked, attempt muted play then set a flag (console warns).
+        const tryPlay = async () => {
+          try {
+            await audioEl.play();
+            // Playback succeeded without a user gesture
+            console.log(`[useWebRTC] Playing remote audio for ${peerId}`);
+            // If it was muted to force play, unmute if possible (leave it muted if autoplay policy prevents)
+            if (audioEl.muted) {
+              // attempt to unmute — may still be blocked without user gesture
+              try {
+                audioEl.muted = false;
+              } catch (e) { /* ignore */ }
+            }
+          } catch (err) {
+            // Autoplay blocked: try muted play (this usually succeeds). Inform via console so UI can prompt user to unmute.
+            console.warn(`[useWebRTC] Autoplay blocked for ${peerId}, attempting muted playback. User gesture required to unmute.`, err);
+            try {
+              audioEl.muted = true;
+              await audioEl.play();
+              // Keep element muted; app UI should provide an unmute button that calls unmuteRemote(peerId).
+              console.log(`[useWebRTC] Muted playback started for ${peerId}. Call unmuteRemote('${peerId}') on user gesture to unmute.`);
+            } catch (err2) {
+              console.error(`[useWebRTC] Muted playback also failed for ${peerId}`, err2);
+            }
+          }
+        };
+
+        tryPlay();
+      } catch (err) {
+        console.error("Remote audio element setup failed for", peerId, err);
+      }
     };
+
+    // Remote screen streams handled separately
     mgr.onRemoteScreen = (peerId, stream) => {
       setRemoteScreens(prev => {
         const newState = { ...prev };
-        if (stream) {
-          newState[peerId] = stream;
-        } else {
-          delete newState[peerId];
-        }
+        if (stream) newState[peerId] = stream;
+        else delete newState[peerId];
         return newState;
       });
     };
+
+    // Expose a helper on manager too (optional): unmute remote audio element (must be called on user gesture)
+    (mgr as any).unmuteRemote = (peerId: string) => {
+      const audioEl = remoteAudioEls.current[peerId];
+      if (!audioEl) return;
+      try {
+        audioEl.muted = false;
+        audioEl.play().catch(err => console.warn("unmuteRemote play failed", err));
+      } catch (err) {
+        console.warn("unmuteRemote failed", err);
+      }
+    };
+
+    // Also allow globally unmuting all remote audios on gesture
+    (mgr as any).unmuteAllRemotes = () => {
+      Object.values(remoteAudioEls.current).forEach(audioEl => {
+        try {
+          audioEl.muted = false;
+          audioEl.play().catch(() => { /* ignore */ });
+        } catch { /* ignore */ }
+      });
+    };
+
     mgr.onRecordingUpdate = setIsRecording;
     mgr.onSpeakerUpdate = setSpeakers;
     mgr.onSharingBy = setSharingBy;
@@ -1006,6 +1107,17 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
         mgrRef.current.disconnect();
         mgrRef.current = null;
       }
+
+      // cleanup audio elements
+      try {
+        Object.values(remoteAudioEls.current).forEach((el) => {
+          try { el.pause(); } catch { }
+          try { el.srcObject = null; } catch { }
+          try { el.remove(); } catch { }
+        });
+      } catch (e) { /* ignore */ }
+      remoteAudioEls.current = {};
+
       setLocalStream(null);
       setUsers([]);
       setRemoteStreams({});
@@ -1140,6 +1252,25 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const selectAudioDevice = useCallback((deviceId: string | null) => { mgrRef.current?.setAudioDevice(deviceId); }, []);
   const selectVideoDevice = useCallback((deviceId: string | null) => { mgrRef.current?.setVideoDevice(deviceId); }, []);
 
+  // expose unmute helpers for UI usage
+  const unmuteRemote = useCallback((peerId: string) => {
+    const el = remoteAudioEls.current[peerId];
+    if (!el) return;
+    try {
+      el.muted = false;
+      el.play().catch(err => console.warn("unmute remote play failed", err));
+    } catch (err) { console.warn("unmuteRemote error", err); }
+  }, []);
+
+  const unmuteAllRemotes = useCallback(() => {
+    Object.values(remoteAudioEls.current).forEach((el) => {
+      try {
+        el.muted = false;
+        el.play().catch(() => { /* ignore */ });
+      } catch { /* ignore */ }
+    });
+  }, []);
+
   return {
     connect,
     disconnect,
@@ -1169,5 +1300,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     selectAudioDevice,
     selectVideoDevice,
     localStream,
+    // new helpers exposed
+    unmuteRemote,
+    unmuteAllRemotes,
   };
 }
