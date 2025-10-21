@@ -76,7 +76,7 @@ class WebRTCManager {
   pendingScreen: string | null = null;
   lastUserList: string[] = [];
 
-  // --- FIX A: Add guard flag for idempotent disconnect ---
+  // --- FIX A: Add guard flag for idempotent disconnect + allowReconnect helper ---
   private isDisconnected = false;
 
   onProgressUpdate?: (p: MeetingProgress) => void;
@@ -113,6 +113,11 @@ class WebRTCManager {
     this.userId = userId;
     const base = baseSignalingUrl || DEFAULT_WS;
     this.wsUrl = base.replace(/\/+$/, "") + `/ws/${this.room}/${this.userId}`;
+  }
+
+  // Helper: allow reconnect after a permanent disconnect if needed
+  allowReconnect() {
+    this.isDisconnected = false;
   }
 
   log(...args: any[]) {
@@ -207,7 +212,7 @@ class WebRTCManager {
     };
   }
 
-  disconnect() {
+  disconnect(permanent = false) {
     this.log("🔴 Disconnect called for user:", this.userId);
 
     // Idempotent guard: ensure we only run the heavy cleanup once.
@@ -215,56 +220,78 @@ class WebRTCManager {
       this.log("⚠️ Disconnect called, but already disconnected.");
       return;
     }
-    this.isDisconnected = true;
+    this.isDisconnected = permanent ? true : true;
 
     try {
-      // stop local tracks
+      // --- CRITICAL: detach video elements first to allow browser to release devices ---
+      if (typeof window !== "undefined") {
+        try {
+          document.querySelectorAll("video").forEach((el) => {
+            try {
+              // detach only if it's our stream
+              (el as HTMLVideoElement).srcObject = null;
+            } catch (e) { /* ignore */ }
+          });
+        } catch (e) { /* ignore */ }
+      }
+
+      // For each peer, try to remove tracks from senders (replaceTrack(null)) to make sure remote m-lines don't hold devices
+      try {
+        Object.entries(this.peers).forEach(([peerId, pc]) => {
+          try {
+            pc.getSenders().forEach((s: RTCRtpSender) => {
+              try {
+                if (s && typeof s.replaceTrack === "function") {
+                  s.replaceTrack(null);
+                }
+              } catch (e) { /* ignore */ }
+            });
+          } catch (e) { /* ignore */ }
+        });
+      } catch (e) { /* ignore */ }
+
+      // Stop local tracks
       if (this.localStream) {
         this.log("Stopping local media tracks...");
-        this.localStream.getTracks().forEach((track) => {
-          try {
-            track.stop();
-            this.log(`Stopped ${track.kind} track (${track.label})`);
-          } catch { }
-        });
+        try {
+          this.localStream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+              this.log(`Stopped ${track.kind} track (${track.label})`);
+            } catch { /* ignore */ }
+          });
+        } catch (e) { /* ignore */ }
       }
 
-      // stop screen tracks if any
+      // Stop screen tracks if any
       if (this.screenStream) {
         try {
-          this.screenStream.getTracks().forEach((t) => t.stop());
-        } catch { }
+          this.screenStream.getTracks().forEach((t) => {
+            try { t.stop(); } catch { /* ignore */ }
+          });
+        } catch { /* ignore */ }
       }
 
-      // ❗ detach and nullify all references
+      // Nullify streams
       this.localStream = null;
       this.screenStream = null;
 
-      // also clear srcObject from UI video elements
-      if (typeof window !== "undefined") {
-        document.querySelectorAll("video").forEach((el) => {
-          try {
-            if ((el as HTMLVideoElement).srcObject instanceof MediaStream) {
-              (el as HTMLVideoElement).srcObject = null;
-            }
-          } catch { }
-        });
-      }
-
-      // close and clear peer connections
+      // Close and clear peer connections
       for (const [peerId, pc] of Object.entries(this.peers)) {
         try {
           this.log("Closing peer connection for", peerId);
           pc.close();
-        } catch { }
+        } catch { /* ignore */ }
       }
       this.peers = {};
       this.dataChannels = {};
       this.screenSenders = {};
 
-      // close websocket
-      try { this.ws?.close(); } catch { }
+      // Close websocket
+      try { this.ws?.close(); } catch { /* ignore */ }
       this.ws = null;
+
+      this.sharingBy = null;
 
       this.log("✅ All devices and connections released.");
     } catch (err) {
@@ -439,31 +466,59 @@ class WebRTCManager {
     }
   }
 
-  // --- PATCH: attachLocalTracks now replaces tracks on pre-created transceivers (if present),
-  // and falls back to addTrack only if no suitable sender exists.
+  // --- PATCH: attachLocalTracks now prefers transceiver.sender.replaceTrack when present ---
   private attachLocalTracks(pc: RTCPeerConnection & any) {
     if (!this.localStream) return;
 
     const audioTrack = this.localStream.getAudioTracks()[0] ?? null;
     const videoTrack = this.localStream.getVideoTracks()[0] ?? null;
 
-    // Replace audio sender track if present; otherwise add.
-    if (audioTrack) {
-      const audioSender = pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'audio');
-      if (audioSender) {
-        try { audioSender.replaceTrack(audioTrack); } catch (e) { this.log("attachLocalTracks: replace audio failed", e); }
-      } else {
-        try { pc.addTrack(audioTrack, this.localStream); } catch (e) { this.log("attachLocalTracks: add audio failed", e); }
-      }
-    }
+    // Prefer to use transceivers (stable m-line). Find audio transceiver sender first.
+    try {
+      const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
 
-    // Replace camera video sender track if present; otherwise add.
-    if (videoTrack) {
-      const videoSender = pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'video');
-      if (videoSender) {
-        try { videoSender.replaceTrack(videoTrack); } catch (e) { this.log("attachLocalTracks: replace video failed", e); }
-      } else {
-        try { pc.addTrack(videoTrack, this.localStream); } catch (e) { this.log("attachLocalTracks: add video failed", e); }
+      // audio transceiver: choose first transceiver of kind 'audio'
+      const audioTransceiver = transceivers.find((t: RTCRtpTransceiver) => t.receiver && t.receiver.track && t.receiver.track.kind === 'audio' || (t.sender && t.sender.track && t.sender.track.kind === 'audio')) ??
+        transceivers.find((t: RTCRtpTransceiver) => t.mid === null && t.sender && t.sender && t.sender.track === null && t.receiver && t.receiver.track === null && t.sender && t.sender.track === null && (t as any).kind === 'audio');
+
+      // video transceivers: prefer first video transceiver as camera, second reserved for screen
+      const videoTransceivers = transceivers.filter((t: RTCRtpTransceiver) => (t.receiver && t.receiver.track && t.receiver.track.kind === 'video') || t.sender?.track?.kind === 'video' || (t && (t as any).kind === 'video'));
+      const cameraTransceiver = videoTransceivers.length > 0 ? videoTransceivers[0] : null;
+
+      if (audioTrack) {
+        const sender = audioTransceiver?.sender ?? pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'audio');
+        if (sender && typeof sender.replaceTrack === 'function') {
+          try { sender.replaceTrack(audioTrack); } catch (e) { this.log("attachLocalTracks: replace audio failed", e); }
+        } else {
+          try { pc.addTrack(audioTrack, this.localStream); } catch (e) { this.log("attachLocalTracks: add audio failed", e); }
+        }
+      }
+
+      if (videoTrack) {
+        const sender = cameraTransceiver?.sender ?? pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'video');
+        if (sender && typeof sender.replaceTrack === 'function') {
+          try { sender.replaceTrack(videoTrack); } catch (e) { this.log("attachLocalTracks: replace video failed", e); }
+        } else {
+          try { pc.addTrack(videoTrack, this.localStream); } catch (e) { this.log("attachLocalTracks: add video failed", e); }
+        }
+      }
+    } catch (err) {
+      // fallback: original behavior if transceivers aren't available or error occurs
+      if (audioTrack) {
+        const audioSender = pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'audio');
+        if (audioSender) {
+          try { audioSender.replaceTrack(audioTrack); } catch (e) { this.log("attachLocalTracks fallback: replace audio failed", e); }
+        } else {
+          try { pc.addTrack(audioTrack, this.localStream); } catch (e) { this.log("attachLocalTracks fallback: add audio failed", e); }
+        }
+      }
+      if (videoTrack) {
+        const videoSender = pc.getSenders().find((s: RTCRtpSender) => s.track && s.track.kind === 'video');
+        if (videoSender) {
+          try { videoSender.replaceTrack(videoTrack); } catch (e) { this.log("attachLocalTracks fallback: replace video failed", e); }
+        } else {
+          try { pc.addTrack(videoTrack, this.localStream); } catch (e) { this.log("attachLocalTracks fallback: add video failed", e); }
+        }
       }
     }
   }
@@ -527,6 +582,7 @@ class WebRTCManager {
       }
     };
 
+    // Ensure localStream exists (but do NOT attach tracks yet — transceivers first)
     try {
       if (!this.localStream) {
         await this.ensureLocalStream(this.initialAudioEnabled, this.initialVideoEnabled);
@@ -540,7 +596,6 @@ class WebRTCManager {
     // Order matters: audio, camera-video, screen-video (reserved).
     // Creating transceivers here prevents later add/remove from changing m-line order.
     try {
-      // Only create transceivers once per PeerConnection (creating duplicates is harmless but avoid it)
       const existing = pc.getTransceivers();
       if (!existing || existing.length === 0) {
         pc.addTransceiver("audio", { direction: "sendrecv" });
