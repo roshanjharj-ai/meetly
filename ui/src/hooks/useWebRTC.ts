@@ -204,15 +204,15 @@ class WebRTCManager {
     };
   }
 
-  // --- inside class WebRTCManager ---
   disconnect() {
     this.log("🔴 Disconnect called for user:", this.userId);
 
-    // --- 1️⃣ Stop all local media tracks ---
+    // --- 1️⃣ Stop local media tracks safely ---
     if (this.localStream) {
       this.log("Stopping local media tracks...");
       this.localStream.getTracks().forEach((track) => {
         try {
+          track.enabled = false; // disable first
           if (track.readyState === "live") {
             track.stop();
             this.log(`Stopped ${track.kind} track (${track.label || track.id})`);
@@ -221,16 +221,9 @@ class WebRTCManager {
           this.log("Error stopping track:", err);
         }
       });
-
-      // Detach from any <video> or <audio> elements
-      this.localStream.getTracks().forEach((track) => {
-        track.onended = null;
-      });
-      // Clear the object reference so GC can release camera/mic
-      this.localStream = null;
     }
 
-    // --- 2️⃣ Stop screen share stream (if any) ---
+    // --- 2️⃣ Stop screen share if active ---
     if (this.screenStream) {
       this.log("Stopping screen share tracks...");
       this.screenStream.getTracks().forEach((track) => {
@@ -239,9 +232,9 @@ class WebRTCManager {
       this.screenStream = null;
     }
 
-    // --- 3️⃣ Close audio context / analyser if used (releases mic lock in mobile) ---
+    // --- 3️⃣ Graceful release of AudioContext ---
     try {
-      if (typeof (window as any).audioContextRef !== "undefined") {
+      if ((window as any).audioContextRef) {
         const ctx = (window as any).audioContextRef;
         if (ctx && ctx.state !== "closed") {
           this.log("Closing shared AudioContext...");
@@ -253,43 +246,50 @@ class WebRTCManager {
       this.log("Error closing audio context:", err);
     }
 
-    // --- 4️⃣ Close all peer connections cleanly ---
+    // --- 4️⃣ Wait briefly before nullifying stream ---
+    setTimeout(() => {
+      this.localStream = null;
+      this.onLocalStream?.(null);
+      this.log("🎬 Local media fully released.");
+    }, 200);
+
+    // --- 5️⃣ Close peers + data channels ---
     this.log("Closing peer connections...");
     Object.entries(this.peers).forEach(([pid, pc]) => {
       try {
-        console.log("Closing peer connection for", pid);
+        this.log("Closing peer connection for", pid);
         pc.getSenders().forEach((s) => {
-          try { if (s.track) { s.track.stop(); } } catch { }
           try { s.replaceTrack(null); } catch { }
         });
         pc.getReceivers().forEach((r) => {
           try { r.track?.stop(); } catch { }
         });
-        try { pc.close(); } catch { }
-      } catch { }
+        pc.close();
+      } catch (err) {
+        this.log("Error closing peer:", err);
+      }
     });
     this.peers = {};
     this.dataChannels = {};
     this.screenSenders = {};
     this.creatingPeer = {};
 
-    // --- 5️⃣ Close WebSocket ---
+    // --- 6️⃣ Close WebSocket connection ---
     if (this.ws) {
       try {
-        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-          this.ws.close(1000, 'user disconnect');
+        if ([WebSocket.OPEN, WebSocket.CONNECTING].includes(this.ws.readyState as 0 | 1)) {
+          this.ws.close();
         }
       } catch { }
       this.ws = null;
     }
 
-    // --- 6️⃣ Notify UI and clear callbacks ---
-    this.onLocalStream?.(null);
+    // --- 7️⃣ Notify UI ---
     this.onRemoteStream?.("", null);
     this.onRemoteScreen?.("", null);
-    this.onSharingBy?.(null);
     this.onUsers?.([]);
     this.onUsersCount?.(0);
+    this.onSharingBy?.(null);
 
     this.log("✅ All devices and connections released.");
   }
@@ -730,25 +730,37 @@ class WebRTCManager {
       });
       this.screenStream = null;
 
-      // --- 2️⃣ Restore camera video track if available ---
-      const cameraTrack = this.localStream?.getVideoTracks()[0] || null;
-      if (cameraTrack) {
-        this.log("🎥 Restoring camera track to peers...");
-        Object.values(this.peers).forEach((pc) => {
-          const senders = pc.getSenders().filter((s) => s.track?.kind === "video");
-          senders.forEach((sender) => {
-            try {
-              sender.replaceTrack(cameraTrack);
-            } catch (err) {
-              this.log("replaceTrack (camera restore) failed:", err);
-            }
-          });
-        });
-      } else {
-        this.log("⚠️ No camera track found to restore after screen share stop.");
+      // --- 2️⃣ Reacquire mic if screen shared with audio ---
+      let micTrack: MediaStreamTrack | null = null;
+      try {
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micTrack = micStream.getAudioTracks()[0] || null;
+        this.log("🎤 Reacquired microphone track after screen stop:", micTrack ? micTrack.label : "none");
+      } catch (err) {
+        this.log("⚠️ Unable to reacquire mic after screen stop:", err);
       }
 
-      // --- 3️⃣ Reset sharing state and broadcast update ---
+      // --- 3️⃣ Restore camera + mic tracks to peers ---
+      const cameraTrack = this.localStream?.getVideoTracks()[0] || null;
+      Object.values(this.peers).forEach((pc) => {
+        pc.getSenders().forEach((sender) => {
+          if (sender.track?.kind === "video" && cameraTrack) {
+            try { sender.replaceTrack(cameraTrack); } catch (err) { this.log("replaceTrack video failed:", err); }
+          }
+          if (sender.track?.kind === "audio" && micTrack) {
+            try { sender.replaceTrack(micTrack); } catch (err) { this.log("replaceTrack audio failed:", err); }
+          }
+        });
+      });
+
+      // --- 4️⃣ Update localStream with new mic if available ---
+      if (micTrack) {
+        const existingAudios = this.localStream?.getAudioTracks() || [];
+        existingAudios.forEach((t) => { try { t.stop(); } catch { } });
+        if (this.localStream) this.localStream.addTrack(micTrack);
+      }
+
+      // --- 5️⃣ Reset sharing state + broadcast ---
       this.screenSenders = {};
       this.sharingBy = null;
       this.onSharingBy?.(null);
@@ -757,7 +769,7 @@ class WebRTCManager {
         payload: { sharing: false, by: this.userId },
       });
 
-      // --- 4️⃣ Safely rebuild peers to prevent SDP order mismatch ---
+      // --- 6️⃣ Recreate peers safely ---
       const peersToRecreate = Object.keys(this.peers);
       this.log("♻️ Recreating peers after screen stop:", peersToRecreate);
 
@@ -766,22 +778,11 @@ class WebRTCManager {
           const oldPc = this.peers[pid];
           try { oldPc.close(); } catch { }
           delete this.peers[pid];
-
-          // --- Safe recreate with negotiation guard ---
           const newPc = await this.createPeer(pid, true);
           this.log("✅ Recreated peer connection for", pid);
 
-          // --- Ensure audio continuity ---
-          const audioTrack = this.localStream?.getAudioTracks()[0];
-          if (audioTrack) {
-            const sender = newPc.getSenders().find((s: any) => s.track?.kind === "audio");
-            if (!sender) {
-              newPc.addTrack(audioTrack, this.localStream!);
-              this.log("🎧 Reattached audio track for", pid);
-            }
-          }
-
-          // --- Renegotiate safely ---
+          // Send a new offer after short debounce
+          await new Promise(r => setTimeout(r, 200));
           if (newPc.signalingState === "stable") {
             const offer = await newPc.createOffer();
             await newPc.setLocalDescription(offer);
@@ -792,17 +793,14 @@ class WebRTCManager {
               to: pid,
               payload: newPc.localDescription,
             });
-            this.log("📤 Sent new offer after screen stop to", pid);
-          } else {
-            this.log("⚠️ Skipped offer — signaling not stable for", pid);
+            this.log("📤 Sent fresh offer after screen stop to", pid);
           }
-
         } catch (err) {
           this.log("stopScreenShare → peer recreate error for", pid, err);
         }
       }
 
-      this.log("✅ Screen share fully stopped, peers refreshed.");
+      this.log("✅ Screen share fully stopped, mic/camera restored, peers refreshed.");
     } catch (err) {
       this.log("stopScreenShare error:", err);
     }

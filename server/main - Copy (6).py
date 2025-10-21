@@ -141,7 +141,7 @@ async def verify_meeting_join_code(
 def get_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     return crud.get_meetings(db, skip=skip, limit=limit)
 
-@app.post("/api/createMeeting", response_model=schemas.Meeting)
+@app.post("/api/createMeeting", response_model=schemas.Meeting) # MODIFIED
 def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     # Create the meeting in the DB
     db_meeting = crud.create_meeting(db=db, meeting=meeting) # MODIFIED
@@ -153,7 +153,7 @@ def create_meeting(meeting: schemas.MeetingCreate, db: Session = Depends(get_db)
     
     return db_meeting # MODIFIED
 
-@app.put("/api/updateMeeting/{meeting_id}", response_model=schemas.Meeting)
+@app.put("/api/updateMeeting/{meeting_id}", response_model=schemas.Meeting) # MODIFIED
 def update_meeting_route(
     meeting_id: int,
     meeting_update: schemas.MeetingCreate, # Using Create schema as it matches client payload
@@ -171,7 +171,6 @@ def update_meeting_route(
 
     return db_meeting
 
-# --- ADD THIS ROUTE ---
 @app.delete("/api/deleteMeeting/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meeting_route(
     meeting_id: int,
@@ -188,7 +187,6 @@ def delete_meeting_route(
 def get_participants(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     return crud.get_participants(db, skip=skip, limit=limit)
 
-# --- ADD THIS ROUTE ---
 @app.post("/api/createParticipant", response_model=schemas.Participant)
 def create_participant_route(
     participant: schemas.ParticipantCreate,
@@ -197,7 +195,6 @@ def create_participant_route(
 ):
     return crud.create_participant(db=db, participant=participant)
 
-# --- ADD THIS ROUTE ---
 @app.put("/api/updateParticipant/{participant_id}", response_model=schemas.Participant)
 def update_participant_route(
     participant_id: int,
@@ -210,7 +207,6 @@ def update_participant_route(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
     return db_participant
 
-# --- ADD THIS ROUTE ---
 @app.delete("/api/deleteParticipant/{participant_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_participant_route(
     participant_id: int,
@@ -219,7 +215,7 @@ def delete_participant_route(
 ):
     db_participant = crud.delete_participant(db, participant_id=participant_id)
     if db_participant is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
+        raise HTTPException(status_code=status.HTTP_440_NOT_FOUND, detail="Participant not found")
     return # Return None with 204 status
 
 # === WebSocket Logic ===
