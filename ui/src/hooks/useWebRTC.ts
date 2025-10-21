@@ -524,7 +524,7 @@ class WebRTCManager {
 
     pc.onconnectionstatechange = () => {
       this.log("Conn state", targetId, pc.connectionState);
-      if (["failed", "closed"].E.includes(pc.connectionState)) {
+      if (["failed", "closed"].includes(pc.connectionState)) {
         // --- FIX A: Clear negotiation timer on close ---
         if (pc._negotiationTimer) {
           window.clearTimeout(pc._negotiationTimer);
@@ -953,7 +953,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       try {
         // --- FIX A: Check if localStream still has audio tracks ---
         if (localStream.getAudioTracks().length === 0) {
-            this.log("VAD: No audio tracks found, skipping.");
+            console.log("VAD: No audio tracks found, skipping.");
             return;
         }
         audioCtx = new AudioContext();

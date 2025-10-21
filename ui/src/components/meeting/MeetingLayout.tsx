@@ -1,4 +1,5 @@
 // src/pages/Meeting/MeetingLayout.tsx
+import DOMPurify from "dompurify";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import React, {
   useEffect,
@@ -7,12 +8,11 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { BsPinAngle, BsPinAngleFill, BsRobot } from "react-icons/bs";
 import {
   FaMicrophoneSlash,
   FaVideoSlash,
 } from "react-icons/fa";
-import { BsPinAngle, BsPinAngleFill, BsRobot } from "react-icons/bs";
-import DOMPurify from "dompurify";
 import "./MeetingLayout.css"; // We'll create this new CSS file
 
 // --- Constants ---
