@@ -345,28 +345,25 @@ class WebRTCManager {
     const { action, from, payload } = msg;
     if (!from) return;
 
+    // --- create peer if missing ---
     let pc = this.peers[from];
     if (!pc && !this.creatingPeer[from]) {
       this.creatingPeer[from] = true;
       try {
         pc = await this.createPeer(from, false);
       } catch (err) {
-        this.log('createPeer (responder) failed for', from, err);
+        this.log("createPeer (responder) failed for", from, err);
       } finally {
         delete this.creatingPeer[from];
       }
     }
-    // --- FIX B: Check if peer still exists ---
-    if (!pc || pc.signalingState === 'closed') {
-      this.log("? handleSignal: Peer not found or closed, ignoring signal", action, from);
+
+    if (!pc || pc.signalingState === "closed") {
+      this.log("handleSignal: peer not found or closed → ignore", from);
       return;
     }
 
-
-    pc._queuedCandidates = pc._queuedCandidates || [];
-    pc._makingOffer = !!pc._makingOffer;
-    pc._ignoreOffer = !!pc._ignoreOffer;
-
+    // --- deterministic, string-safe politeness check ---
     function stableHash(str: string): number {
       let h = 0;
       for (let i = 0; i < str.length; i++) {
@@ -375,112 +372,78 @@ class WebRTCManager {
       }
       return Math.abs(h);
     }
-
-    // Guarantee one polite peer per pair:
-    const myHash = stableHash(this.userId);
-    const theirHash = stableHash(from);
-
-    // The higher hash becomes polite → deterministic and consistent even for strings.
-    const polite = myHash > theirHash;
+    const polite = stableHash(this.userId) > stableHash(from);
     pc._polite = polite;
+    this.log(`Politeness check: ${this.userId} vs ${from} → ${polite ? "polite" : "impolite"}`);
 
-    this.log(`Politeness check: ${this.userId}(${myHash}) vs ${from}(${theirHash}) → ${polite ? "polite" : "impolite"}`);
+    // --- offer-collision logic ---
+    const isOfferCollision = action === "offer" &&
+      (pc.signalingState !== "stable" || pc._makingOffer);
 
-    const isOfferCollision = action === 'offer' && (pc.signalingState !== 'stable' || pc._makingOffer);
     if (isOfferCollision && !polite) {
       this.log("⚠️ Offer collision → ignoring offer from", from, "because not polite");
       return;
     }
 
-    if (isOfferCollision && polite) {
-      setTimeout(async () => {
-        if (!pc || pc.signalingState === "closed" || pc.signalingState === "stable") return;
-        this.log("♻️ Retrying negotiation after collision with", from);
-        pc._ignoreOffer = false;
-        pc._makingOffer = false;
-        try {
-          // Properly trigger a new offer to re-sync SDP
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          this.wsSend({
-            type: "signal",
-            action: "offer",
-            from: this.userId,
-            to: from,
-            payload: pc.localDescription,
-          });
-          this.log("✅ Retried negotiation successfully with", from);
-        } catch (err) {
-          this.log("Retry negotiation error:", err);
-        }
-      }, 2000);
-    }
-
     try {
-      if (action === 'offer') {
+      if (action === "offer") {
         pc._ignoreOffer = !polite && isOfferCollision;
-        this.log("📨 Received offer from", from, "polite:", polite, "collision:", isOfferCollision);
+        this.log("📨 Received offer from", from, "collision:", isOfferCollision);
 
-        if (isOfferCollision && !polite) {
-          this.log("🙈 Non-polite peer ignoring offer, state:", pc.signalingState);
-          return;
-        }
-
-        if (pc.signalingState !== 'stable') {
-          try { await pc.setLocalDescription({ type: 'rollback' } as any); } catch (e) { /* ignore */ }
+        // rollback if needed
+        if (pc.signalingState !== "stable") {
+          try { await pc.setLocalDescription({ type: "rollback" } as any); } catch { }
         }
 
         await pc.setRemoteDescription(new RTCSessionDescription(payload));
 
-        if (pc._queuedCandidates && pc._queuedCandidates.length) {
-          const queued = pc._queuedCandidates.slice();
-          pc._queuedCandidates = [];
-          for (const c of queued) {
-            try { await pc.addIceCandidate(c); } catch (e) { this.log('addIceCandidate (queued) failed', e); }
+        // apply any queued ICE
+        if (pc._queuedCandidates?.length) {
+          for (const c of pc._queuedCandidates) {
+            try { await pc.addIceCandidate(c); } catch (e) { this.log("queued ICE add failed", e); }
           }
+          pc._queuedCandidates = [];
         }
 
+        // create and send answer
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         this.wsSend({
-          type: 'signal',
-          action: 'answer',
+          type: "signal",
+          action: "answer",
           from: this.userId,
           to: from,
           payload: pc.localDescription,
         });
 
-      } else if (action === 'answer') {
-        this.log('?? Received answer from', from);
-        if (pc.signalingState === 'have-local-offer') {
+      } else if (action === "answer") {
+        this.log("✅ Received answer from", from);
+        if (pc.signalingState === "have-local-offer") {
           await pc.setRemoteDescription(new RTCSessionDescription(payload));
 
-          if (pc._queuedCandidates && pc._queuedCandidates.length) {
-            const queued = pc._queuedCandidates.slice();
-            pc._queuedCandidates = [];
-            for (const c of queued) {
-              try { await pc.addIceCandidate(c); } catch (e) { this.log('addIceCandidate (queued) failed', e); }
+          if (pc._queuedCandidates?.length) {
+            for (const c of pc._queuedCandidates) {
+              try { await pc.addIceCandidate(c); } catch (e) { this.log("queued ICE add failed", e); }
             }
+            pc._queuedCandidates = [];
           }
         } else {
-          this.log('?? Ignoring answer — invalid state:', pc.signalingState);
+          this.log("Ignoring answer — invalid state:", pc.signalingState);
         }
 
-      } else if (action === 'ice' && payload) {
+      } else if (action === "ice" && payload) {
         if (!pc.remoteDescription || !pc.remoteDescription.type) {
           pc._queuedCandidates = pc._queuedCandidates || [];
           pc._queuedCandidates.push(payload);
-          this.log('?? Queuing ICE candidate (no remoteDescription yet) from', from);
+          this.log("Queuing ICE candidate (no remoteDescription yet) from", from);
         } else {
-          try { await pc.addIceCandidate(payload); } catch (err) { this.log('addIceCandidate error:', err); }
+          try { await pc.addIceCandidate(payload); } catch (err) { this.log("addIceCandidate error:", err); }
         }
       }
     } catch (err) {
-      this.log(`handleSignal error on action ${action}:`, err);
-
-      // --- FIX B: Handle m-line error by safely closing the peer ---
-      if (String(err).includes('m-lines') || String(err).includes('order of m-lines')) {
-        this.log('❌ FATAL: SDP m-line mismatch. Closing broken peer for', from);
+      this.log(`handleSignal error on ${action}:`, err);
+      if (String(err).includes("m-lines")) {
+        this.log("❌ SDP m-line mismatch → closing peer", from);
         try { pc.close(); } catch { }
         delete this.peers[from];
         this.onRemoteStream?.(from, null);
@@ -675,48 +638,38 @@ class WebRTCManager {
 
     // --- FIX B: Debounce onnegotiationneeded ---
     pc.onnegotiationneeded = async () => {
-      if (pc._negotiationTimer) {
-        window.clearTimeout(pc._negotiationTimer);
+      // prevent repeated renegotiation loops
+      if (pc._makingOffer || pc.signalingState !== "stable") {
+        this.log("🟡 skip negotiation →", targetId, pc.signalingState);
+        return;
       }
-      pc._negotiationTimer = window.setTimeout(async () => {
-        pc._negotiationTimer = null;
 
-        if (pc._makingOffer || pc.signalingState !== "stable" || pc._ignoreOffer) {
-          this.log(`? Skip negotiation (busy, unstable, or ignoring) for ${targetId}. State: ${pc.signalingState}, MakingOffer: ${pc._makingOffer}, IgnoreOffer: ${pc._ignoreOffer}`);
+      pc._makingOffer = true;
+      try {
+        this.log("🔁 onnegotiationneeded → creating offer for", targetId);
+        const offer = await pc.createOffer();
+
+        // ensure still stable before applying
+        if (pc.signalingState !== "stable") {
+          this.log("🟡 abort offer; state changed mid-offer for", targetId);
           return;
         }
 
-        if (pc.signalingState === 'closed') {
-          this.log(`? Skip negotiation (peer closed) for ${targetId}`);
-          return;
-        }
-
-        pc._makingOffer = true;
-        try {
-          this.log("🔁 onnegotiationneeded → offer to", targetId);
-          const offer = await pc.createOffer();
-
-          // After await, check state again in case a remote offer arrived
-          if (pc.signalingState !== "stable") {
-            this.log(`? Skip negotiation (state changed mid-offer) for ${targetId}`);
-            return;
-          }
-
-          await pc.setLocalDescription(offer);
-          this.wsSend({
-            type: "signal",
-            action: "offer",
-            from: this.userId,
-            to: targetId,
-            payload: pc.localDescription,
-          });
-        } catch (err) {
-          this.log("negotiationneeded error:", err);
-        } finally {
-          pc._makingOffer = false;
-        }
-      }, 100); // 100ms debounce
+        await pc.setLocalDescription(offer);
+        this.wsSend({
+          type: "signal",
+          action: "offer",
+          from: this.userId,
+          to: targetId,
+          payload: pc.localDescription,
+        });
+      } catch (err) {
+        this.log("negotiationneeded error:", err);
+      } finally {
+        pc._makingOffer = false;
+      }
     };
+
     // --- End FIX B ---
 
 
