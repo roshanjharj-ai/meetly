@@ -169,6 +169,12 @@ class WebRTCManager {
       return;
     }
 
+    if (this.isDisconnected) {
+      this.log("⚠️ Disconnect called, but already disconnected.");
+      return;
+    }
+    this.isDisconnected = true;
+
     // --- FIX A: Reset disconnect flag on new connection ---
     this.isDisconnected = false;
 
