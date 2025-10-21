@@ -367,13 +367,53 @@ class WebRTCManager {
     pc._makingOffer = !!pc._makingOffer;
     pc._ignoreOffer = !!pc._ignoreOffer;
 
-    const polite = this.userId < from ? false : true;
+    function stableHash(str: string): number {
+      let h = 0;
+      for (let i = 0; i < str.length; i++) {
+        h = ((h << 5) - h) + str.charCodeAt(i);
+        h |= 0;
+      }
+      return Math.abs(h);
+    }
+
+    // Guarantee one polite peer per pair:
+    const myHash = stableHash(this.userId);
+    const theirHash = stableHash(from);
+
+    // The higher hash becomes polite → deterministic and consistent even for strings.
+    const polite = myHash > theirHash;
     pc._polite = polite;
+
+    this.log(`Politeness check: ${this.userId}(${myHash}) vs ${from}(${theirHash}) → ${polite ? "polite" : "impolite"}`);
 
     const isOfferCollision = action === 'offer' && (pc.signalingState !== 'stable' || pc._makingOffer);
     if (isOfferCollision && !polite) {
       this.log("⚠️ Offer collision → ignoring offer from", from, "because not polite");
       return;
+    }
+
+    if (isOfferCollision && polite) {
+      setTimeout(async () => {
+        if (!pc || pc.signalingState === "closed" || pc.signalingState === "stable") return;
+        this.log("♻️ Retrying negotiation after collision with", from);
+        pc._ignoreOffer = false;
+        pc._makingOffer = false;
+        try {
+          // Properly trigger a new offer to re-sync SDP
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          this.wsSend({
+            type: "signal",
+            action: "offer",
+            from: this.userId,
+            to: from,
+            payload: pc.localDescription,
+          });
+          this.log("✅ Retried negotiation successfully with", from);
+        } catch (err) {
+          this.log("Retry negotiation error:", err);
+        }
+      }, 2000);
     }
 
     try {
