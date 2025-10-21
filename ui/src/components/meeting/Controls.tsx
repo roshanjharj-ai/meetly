@@ -53,13 +53,18 @@ const SidebarButton = React.memo(({ performAction, isSidebar }: { performAction:
 ));
 
 const ShareButton = React.memo(({ isSharing, handleShare, menuVariants }: any) => {
-    const [isShareMenuOpen, setShareMenuOpen] = useState(false);
+    // const [isShareMenuOpen, setShareMenuOpen] = useState(false);
     return (
         <div className="position-relative d-flex align-items-center">
-            <motion.button onClick={() => { if (isSharing) { handleShare('none'); } else { setShareMenuOpen((v: boolean) => !v); } }} aria-label={isSharing ? "Stop sharing" : "Share screen"} className={`control-button ${isSharing ? 'active-toggle' : ''}`}>
+            <motion.button onClick={() => {
+                if (isSharing) { handleShare('none'); } else {
+                    //setShareMenuOpen((v: boolean) => !v);
+                    handleShare("mic");
+                }
+            }} aria-label={isSharing ? "Stop sharing" : "Share screen"} className={`control-button ${isSharing ? 'active-toggle' : ''}`}>
                 <FiShare size={20} />
             </motion.button>
-            <AnimatePresence>
+            {/* <AnimatePresence>
                 {isShareMenuOpen && (
                     <motion.div className="share-dropdown-menu" variants={menuVariants} initial="hidden" animate="visible" exit="hidden">
                         <div className="share-dropdown-item" onClick={() => handleShare("none")}><PiTelevisionSimpleBold size={18} /> <span className="small">Share Screen</span></div>
@@ -67,7 +72,7 @@ const ShareButton = React.memo(({ isSharing, handleShare, menuVariants }: any) =
                         <div className="share-dropdown-item" onClick={() => handleShare("system")}><BsEarbuds size={18} /> <span className="small">Share with Audio</span></div>
                     </motion.div>
                 )}
-            </AnimatePresence>
+            </AnimatePresence> */}
         </div>
     );
 });
