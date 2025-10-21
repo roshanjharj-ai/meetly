@@ -251,6 +251,7 @@ class WebRTCManager {
     this.log("Closing peer connections...");
     Object.entries(this.peers).forEach(([pid, pc]) => {
       try {
+        console.log("Closing peer connection for", pid);
         pc.getSenders().forEach((s) => {
           try { s.replaceTrack(null); } catch { }
         });
