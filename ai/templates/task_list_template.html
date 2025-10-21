@@ -1,0 +1,22 @@
+<div class="bot-task-container">
+    <div class="bot-task-header">
+        <h2>{{ title }}</h2>
+    </div>
+    <div class="bot-task-list">
+        {% for task in tasks %}
+        <div class="bot-task-item {% if task.status == 'Stuck' %}stuck{% elif task.is_overdue %}overdue{% endif %}">
+            <div class="bot-task-row">
+                <div class="bot-task-title">{{ task.title }}</div>
+                <div class="bot-task-status {{ task.status|lower }}">{{ task.status }}</div>
+            </div>
+            <div class="bot-task-row">
+                <div class="bot-task-owner">
+                    <div class="bot-task-avatar">{{ task.owner_initials }}</div>
+                    <div class="bot-task-owner-name">{{ task.owner }}</div>
+                </div>
+                <div class="bot-task-date">{{ task.due_date }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>

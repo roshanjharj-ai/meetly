@@ -1,0 +1,51 @@
+<div class="bot-task-container">
+  <div class="bot-task-item {% if task.status == 'Stuck' %}stuck{% elif task.is_overdue %}overdue{% endif %}">
+    <div class="bot-task-row">
+      <div class="bot-task-title">{{ task.title }}</div>
+      <div class="bot-task-status {{ task.status|lower }}">{{ task.status }}</div>
+    </div>
+
+    <div class="bot-task-owner" style="margin-top: 6px;">
+      <div class="bot-task-avatar">{{ task.owner_initials }}</div>
+      <div class="bot-task-owner-name">{{ task.owner }}</div>
+    </div>
+
+    <div class="bot-task-details">
+      <div class="bot-task-description">{{ task.description }}</div>
+
+      <div class="bot-task-info">
+        <div class="bot-task-info-item">
+          <div class="bot-task-info-label">Start Date</div>
+          <div class="bot-task-info-value">{{ task.start_date }}</div>
+        </div>
+        <div class="bot-task-info-item">
+          <div class="bot-task-info-label">Expected Completion</div>
+          <div class="bot-task-info-value">{{ task.expected_completion }}</div>
+        </div>
+        <div class="bot-task-info-item">
+          <div class="bot-task-info-label">Planned Completion</div>
+          <div class="bot-task-info-value">{{ task.planned_completion }}</div>
+        </div>
+      </div>
+
+      <div class="bot-task-effort {% if task.completed > task.estimated %}overshoot{% endif %}">
+        <span class="estimated">Estimated: {{ task.estimated }}h</span>
+        <span class="completed">Completed: {{ task.completed }}h</span>
+        <span class="remaining">Remaining: {{ task.remaining }}h</span>
+      </div>
+
+      <div class="bot-task-comments">
+        <h4 style="font-size:0.95rem;margin-bottom:6px;">Comments</h4>
+        {% for c in task.comments %}
+        <div class="bot-task-comment {% if c.commented_by == 'Bot' %}bot{% endif %}">
+          <div class="bot-task-comment-header">
+            <span>{{ c.commented_by }}</span>
+            <span>{{ c.time }}</span>
+          </div>
+          <div class="bot-task-comment-text">{{ c.comment }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>

@@ -2,6 +2,25 @@ import argparse
 import asyncio
 import os
 from core.listener import VirtualListener
+from pydub import AudioSegment
+
+
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# Construct the absolute path to ffmpeg.exe inside a 'bin' folder
+FFMPEG_PATH = os.path.join(script_dir, "bin", "ffmpeg.exe")
+
+ffmpeg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bin", "ffmpeg.exe")
+if os.path.exists(ffmpeg_path):
+    AudioSegment.converter = ffmpeg_path
+    print(f"🔧 Pydub configured to use FFmpeg at: {ffmpeg_path}")
+
+if not os.path.exists(FFMPEG_PATH):
+    print(f"WARNING: ffmpeg.exe not found at {FFMPEG_PATH}. The bot will be unable to speak.")
+else:
+    # Set an environment variable that libraries like pydub can use
+    os.environ["FFMPEG_PATH"] = FFMPEG_PATH
+    print(f"🔧 FFmpeg located at: {FFMPEG_PATH}")
 
 
 async def run_bot(room: str, name: str, server: str):

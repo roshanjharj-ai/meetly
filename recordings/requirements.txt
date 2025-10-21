@@ -1,0 +1,16 @@
+# Web Framework
+fastapi>=0.100.0
+uvicorn>=0.23.0
+
+# WebRTC and Media Handling
+aiortc>=1.5.0
+aiohttp>=3.8.0
+numpy>=1.24.0
+av>=11.0.0
+
+# WebSocket Client (ensure it's a modern version)
+websockets>=10.0
+
+# Optional: Azure Blob Storage
+azure-storage-blob>=12.14.0
+azure-core>=1.26.0
