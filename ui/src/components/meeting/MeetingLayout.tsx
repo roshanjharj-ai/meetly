@@ -44,13 +44,12 @@ type MeetingLayoutProps = {
   users: User[]; 
   botNames: string[];
   botSpeaker: string;
-  sharingBy: string | null;
+  sharingBy: string | null; // <-- We will use this in the side pane logic
   sharedContent: string | null;
   remoteScreenStream: MediaStream | null;
   pinnedUserId: string | null;
   onPinUser: (userId: string) => void;
   theme: string;
-  // --- [Fix 2 & 3] Add new props ---
   isMobile: boolean;
   isChatSidebarOpen: boolean;
 };
@@ -329,12 +328,12 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
   users,
   botNames,
   botSpeaker,
+  sharingBy, // <-- Prop is here
   sharedContent,
   remoteScreenStream,
   pinnedUserId,
   onPinUser,
   theme,
-  // --- [Fix 2 & 3] Destructure new props ---
   isMobile,
   isChatSidebarOpen,
 }: MeetingLayoutProps) => {
@@ -356,18 +355,36 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
     [humanUsers, pinnedUserId]
   );
 
+  // **************************************************
+  // *** FIX 1: Re-order mainViewType logic ***
+  // We check for sharing first, then content, THEN manual pin.
+  // This makes sharing "auto-pin" over a manual pin.
+  // **************************************************
   const mainViewType = useMemo(() => {
-    if (pinnedUser) return "pin";
     if (remoteScreenStream) return "share";
     if (sharedContent) return "content";
+    if (pinnedUser) return "pin";
     return "grid";
-  }, [pinnedUser, remoteScreenStream, sharedContent]);
+  }, [pinnedUser, remoteScreenStream, sharedContent]); // Dependency order doesn't matter, but logic inside does
 
-  // --- Determine Side Pane Users ---
+  // **************************************************
+  // *** FIX 2: Update sidePaneUsers logic ***
+  // When sharing, filter out the sharer (`sharingBy`).
+  // When pinned, filter out the pinned user (`pinnedUserId`).
+  // **************************************************
   const sidePaneUsers = useMemo(() => {
-    if (mainViewType === "grid") return [];
-    return humanUsers.filter(u => u.id !== pinnedUserId);
-  }, [humanUsers, mainViewType, pinnedUserId]);
+    if (mainViewType === "grid") {
+      return [];
+    }
+    if (mainViewType === "pin") {
+      return humanUsers.filter(u => u.id !== pinnedUserId);
+    }
+    if (mainViewType === "share") {
+      return humanUsers.filter(u => u.id !== sharingBy);
+    }
+    // Fallback for "content" or other types
+    return humanUsers; 
+  }, [humanUsers, mainViewType, pinnedUserId, sharingBy]); // <-- Added sharingBy
 
 
   // --- Screen Share Video Ref ---
@@ -438,7 +455,6 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
 
       {/* --- Side Pane --- */}
       <AnimatePresence>
-        {/* --- [Fix 2 & 3] Add !isMobile and !isChatSidebarOpen to the condition --- */}
         {!isMobile && !isChatSidebarOpen && mainViewType !== "grid" && sidePaneUsers.length > 0 && (
           <motion.div
             className="meeting-side-pane"
