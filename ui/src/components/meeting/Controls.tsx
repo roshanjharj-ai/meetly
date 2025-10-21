@@ -1,10 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useState } from "react";
-import { BsEarbuds } from "react-icons/bs";
 import { CgSpinner } from "react-icons/cg";
 import { FiDisc, FiMic, FiMicOff, FiMoreVertical, FiPhoneOff, FiShare, FiVideo, FiVideoOff } from "react-icons/fi";
 import { LuPanelRight, LuPanelRightClose } from "react-icons/lu";
-import { PiTelevisionSimpleBold } from "react-icons/pi";
 import type { MeetingProgress } from "../../hooks/useWebRTC";
 import { ControlActionTypes } from "../../types/meeting.types";
 import StatusPill from "./StatusPill";
@@ -52,27 +50,16 @@ const SidebarButton = React.memo(({ performAction, isSidebar }: { performAction:
     <motion.button onClick={() => performAction(ControlActionTypes.sidebar)} aria-label={isSidebar ? "Hide sidebar" : "Show sidebar"} className="control-button">{isSidebar ? <LuPanelRightClose size={22} /> : <LuPanelRight size={22} />}</motion.button>
 ));
 
-const ShareButton = React.memo(({ isSharing, handleShare, menuVariants }: any) => {
-    // const [isShareMenuOpen, setShareMenuOpen] = useState(false);
+const ShareButton = React.memo(({ isSharing, handleShare }: any) => {
     return (
         <div className="position-relative d-flex align-items-center">
             <motion.button onClick={() => {
                 if (isSharing) { handleShare('none'); } else {
-                    //setShareMenuOpen((v: boolean) => !v);
                     handleShare("mic");
                 }
             }} aria-label={isSharing ? "Stop sharing" : "Share screen"} className={`control-button ${isSharing ? 'active-toggle' : ''}`}>
                 <FiShare size={20} />
             </motion.button>
-            {/* <AnimatePresence>
-                {isShareMenuOpen && (
-                    <motion.div className="share-dropdown-menu" variants={menuVariants} initial="hidden" animate="visible" exit="hidden">
-                        <div className="share-dropdown-item" onClick={() => handleShare("none")}><PiTelevisionSimpleBold size={18} /> <span className="small">Share Screen</span></div>
-                        <div className="share-dropdown-item" onClick={() => handleShare("mic")}><FiMic size={18} /> <span className="small">Share with Mic</span></div>
-                        <div className="share-dropdown-item" onClick={() => handleShare("system")}><BsEarbuds size={18} /> <span className="small">Share with Audio</span></div>
-                    </motion.div>
-                )}
-            </AnimatePresence> */}
         </div>
     );
 });
@@ -86,7 +73,6 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
         performAction(isSharing ? ControlActionTypes.shareStop : `share-${mode}`);
     };
 
-    const menuVariants = { hidden: { opacity: 0, y: 10, scale: 0.95, transition: { duration: 0.15 } }, visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.15 } } };
 
     return (
         <>
@@ -169,7 +155,7 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
                         <MuteButton performAction={performAction} isMuted={isMuted} />
                         <CameraButton performAction={performAction} isCameraOff={isCameraOff} />
                         <RecordButton isRecordingLoading={isRecordingLoading} performAction={performAction} isRecording={isRecording} />
-                        <ShareButton isSharing={isSharing} handleShare={handleShare} menuVariants={menuVariants} />
+                        <ShareButton isSharing={isSharing} handleShare={handleShare} />
                         <EndCallButton performAction={performAction} />
                     </div>
 
@@ -187,10 +173,10 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
                                 <motion.button onClick={() => setMoreMenuOpen(!isMoreMenuOpen)} aria-label="More options" className="control-button"><FiMoreVertical size={22} /></motion.button>
                                 <AnimatePresence>
                                     {isMoreMenuOpen && (
-                                        <motion.div className="more-dropup-menu" variants={menuVariants} initial="hidden" animate="visible" exit="hidden">
+                                        <motion.div className="more-dropup-menu" initial="hidden" animate="visible" exit="hidden">
                                             <CameraButton performAction={performAction} isCameraOff={isCameraOff} />
                                             <RecordButton isRecordingLoading={isRecordingLoading} performAction={performAction} isRecording={isRecording} />
-                                            <ShareButton isSharing={isSharing} handleShare={handleShare} menuVariants={menuVariants} />
+                                            <ShareButton isSharing={isSharing} handleShare={handleShare} />
                                             <SidebarButton performAction={performAction} isSidebar={isSidebar} />
                                         </motion.div>
                                     )}
