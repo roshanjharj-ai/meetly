@@ -17,42 +17,28 @@ import MeetingFooter from "./MeetingFooter";
 import MeetingLayout from "./MeetingLayout";
 
 // *** MOCK BOTNAMES (as requested) ***
-// TODO: Import this from 'src/Constants.ts'
 const BotNames = ["Bot", "AI-Assistant", "Jarvis"];
 
-// Props for the core meeting component, now including theme
 interface MeetingCoreProps {
   room: string;
   userName: string;
   email: string;
   theme: string;
-  initialAudioEnabled?: boolean; // Optional initial state
-  initialVideoEnabled?: boolean; // Optional initial state
+  initialAudioEnabled?: boolean;
+  initialVideoEnabled?: boolean;
+  prefDevice: { audioDeviceId?: string, videoDeviceId?: string };
 }
 
-// Sidebar component
 const SidebarContent = React.memo(
-  ({
-    isMobile,
-    activeSidebarTab,
-    setActiveSidebarTab,
-    setIsSidebarOpen,
-    userList,
-    botSpeaker,
-    sharingBy,
-    chatMessages,
-    sendChatMessage,
-    localUserId,
-  }: any) => {
+  (props: any) => {
+    const { isMobile, activeSidebarTab, setActiveSidebarTab, setIsSidebarOpen, userList, botSpeaker, sharingBy, chatMessages, sendChatMessage, localUserId } = props;
     return (
       <div className="d-flex flex-column h-100 w-100">
         <div className="p-2 d-flex align-items-center justify-content-between border-bottom border-secondary flex-shrink-0">
           <ul className="nav nav-pills">
             <li className="nav-item">
               <button
-                className={`nav-link ${
-                  activeSidebarTab === "participants" && "active"
-                }`}
+                className={`nav-link ${activeSidebarTab === "participants" && "active"}`}
                 onClick={() => setActiveSidebarTab("participants")}
               >
                 Participants
@@ -82,7 +68,7 @@ const SidebarContent = React.memo(
               users={userList}
               botSpeaker={botSpeaker}
               excludeUserId={sharingBy}
-              botNames={BotNames} // Pass BotNames to filter sidebar list
+              botNames={BotNames}
             />
           ) : (
             <ChatPanel
@@ -103,21 +89,18 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
   theme,
   initialAudioEnabled = true,
   initialVideoEnabled = true,
+  prefDevice,
 }) => {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 767.98px)");
 
-  // --- State variables ---
   const [isJoined, setIsJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(!initialAudioEnabled);
   const [isCameraOff, setIsCameraOff] = useState(!initialVideoEnabled);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
-  const [activeSidebarTab, setActiveSidebarTab] = useState<
-    "participants" | "chat"
-  >("participants");
+  const [activeSidebarTab, setActiveSidebarTab] = useState<"participants" | "chat">("participants");
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
 
-  // --- useWebRTC hook remains the same (uses props) ---
   const {
     connect,
     disconnect,
@@ -142,13 +125,15 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     speakers,
     isRecordingLoading,
     meetingProgress,
+    selectAudioDevice,
+    selectVideoDevice,
   } = useWebRTC(room, userName);
 
-  // --- useEffect for connecting remains the same ---
   useEffect(() => {
     const start = async () => {
       try {
-        await connect();
+        // Respect initial audio/video flags provided to the Meeting
+        await connect(initialAudioEnabled, initialVideoEnabled);
         setIsJoined(true);
       } catch (err) {
         console.warn("Connection failed", err);
@@ -158,15 +143,23 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     return () => {
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [connect, disconnect, initialAudioEnabled, initialVideoEnabled]);
 
-  // --- stateRef and its useEffect remain the same ---
   const stateRef = useRef({ isMuted, isCameraOff, isRecording, isScreenSharing });
+
   useEffect(() => {
     stateRef.current = { isMuted, isCameraOff, isRecording, isScreenSharing };
   }, [isMuted, isCameraOff, isRecording, isScreenSharing]);
 
-  // --- disconnectingRef and performAction remain the same ---
+  useEffect(() => {
+    if (prefDevice.audioDeviceId) {
+      selectAudioDevice(prefDevice.audioDeviceId);
+    }
+    if (prefDevice.videoDeviceId) {
+      selectVideoDevice(prefDevice.videoDeviceId);
+    }
+  }, [prefDevice]);
+
   const disconnectingRef = useRef(false);
   const performAction = useCallback(
     async (action: string) => {
@@ -245,8 +238,6 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     ]
   );
 
-  // --- [THIS IS THE REVERTED LOGIC] ---
-  // Reverted userList (for sidebar)
   const userList = useMemo(() => {
     const local = {
       id: userName,
@@ -256,18 +247,17 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
       speaking: (speakers || {})[userName] ?? false,
     };
     const remotes = (users || [])
-      .filter((u) => u !== userName) // <-- This filter is the key
+      .filter((u) => u !== userName)
       .map((id) => ({
         id,
-        isMuted: (peerStatus || {})[id]?.isMuted ?? false, 
-        isCameraOff: (peerStatus || {})[id]?.isCameraOff ?? false, 
+        isMuted: (peerStatus || {})[id]?.isMuted ?? false,
+        isCameraOff: (peerStatus || {})[id]?.isCameraOff ?? false,
         isLocal: false,
-        speaking: (speakers || {})[id] ?? false, 
+        speaking: (speakers || {})[id] ?? false,
       }));
     return [local, ...remotes].sort((a, b) => a.id.localeCompare(b.id));
   }, [userName, users, isMuted, isCameraOff, speakers, peerStatus]);
 
-  // Reverted userGridList (for main layout)
   const userGridList = useMemo(() => {
     const local = {
       id: userName,
@@ -275,17 +265,17 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
       isMuted,
       isCameraOff,
       isLocal: true,
-      speaking: (speakers || {})[userName] ?? false, 
+      speaking: (speakers || {})[userName] ?? false,
     };
     const remotes = (users || [])
-      .filter((u) => u !== userName) // <-- This filter is the key
+      .filter((u) => u !== userName)
       .map((id) => ({
         id,
-        stream: (remoteStreams || {})[id], 
-        isMuted: (peerStatus || {})[id]?.isMuted ?? false, 
-        isCameraOff: (peerStatus || {})[id]?.isCameraOff ?? false, 
+        stream: (remoteStreams || {})[id],
+        isMuted: (peerStatus || {})[id]?.isMuted ?? false,
+        isCameraOff: (peerStatus || {})[id]?.isCameraOff ?? false,
         isLocal: false,
-        speaking: (speakers || {})[id] ?? false, 
+        speaking: (speakers || {})[id] ?? false,
       }));
     return [local, ...remotes].sort((a, b) => a.id.localeCompare(b.id));
   }, [
@@ -298,42 +288,13 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     speakers,
     peerStatus,
   ]);
-  // --- [END OF REVERTED LOGIC] ---
-  
-  // Callback for pinning
+
   const onPinUser = useCallback((userId: string) => {
     setPinnedUserId((prev) => (prev === userId ? null : userId));
   }, []);
 
-  // Get active stream for sharing
   const activeStream = sharingBy ? remoteScreens[sharingBy] : null;
 
-  // --- Determine Main View (for side pane logic) ---
-  // const pinnedUser = useMemo(
-  //   () => userGridList.find((u) => u.id === pinnedUserId),
-  //   [userGridList, pinnedUserId]
-  // );
-
-  // const mainViewType = useMemo(() => {
-  //   if (pinnedUser) return "pin";
-  //   if (activeStream) return "share";
-  //   if (sharedContent) return "content";
-  //   return "grid";
-  // }, [pinnedUser, activeStream, sharedContent]);
-
-  // --- Determine Side Pane Users (for side pane logic) ---
-  // const sidePaneUsers = useMemo(() => {
-  //   if (mainViewType === "grid") return [];
-    
-  //   // Filter out bots AND the pinned user
-  //   return userGridList.filter(u => 
-  //     !BotNames.includes(u.id) && u.id !== pinnedUserId
-  //   );
-
-  // }, [userGridList, mainViewType, pinnedUserId]);
-
-
-  // --- JSX return statement ---
   return (
     <div
       className="d-flex flex-column h-100 position-relative bg-body "
@@ -354,13 +315,11 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
             pinnedUserId={pinnedUserId}
             onPinUser={onPinUser}
             theme={theme}
-            // Keep the layout props
             isMobile={isMobile}
             isChatSidebarOpen={isSidebarOpen}
           />
         </div>
-        
-        {/* Chat/Participant Sidebar (Desktop) */}
+
         {!isMobile && (
           <AnimatePresence>
             {isSidebarOpen && (
@@ -390,7 +349,6 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
         )}
       </main>
 
-      {/* Footer remains the same */}
       <MeetingFooter
         isRecordingLoading={isRecordingLoading}
         isSidebar={isSidebarOpen}
@@ -406,7 +364,6 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
         meetingProgress={meetingProgress}
       />
 
-      {/* Mobile Sidebar (for Chat/Participants) remains the same */}
       {isMobile && (
         <AnimatePresence>
           {isSidebarOpen && (

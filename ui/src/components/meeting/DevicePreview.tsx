@@ -7,12 +7,15 @@ interface DevicePreviewProps {
   initialAudioEnabled: boolean;
   initialVideoEnabled: boolean;
   onPreferencesChange: (prefs: { audioEnabled: boolean; videoEnabled: boolean }) => void;
+  // Optional callback to notify parent when user selects a preferred device
+  onDeviceChange?: (devices: { audioDeviceId?: string; videoDeviceId?: string }) => void;
 }
 
 const DevicePreview: React.FC<DevicePreviewProps> = ({
   initialAudioEnabled,
   initialVideoEnabled,
   onPreferencesChange,
+  onDeviceChange,
 }) => {
   const [audioEnabled, setAudioEnabled] = useState(initialAudioEnabled);
   const [videoEnabled, setVideoEnabled] = useState(initialVideoEnabled);
@@ -28,33 +31,54 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number>(0);
 
-  const getDevices = async () => {
+  const getDevices = async (forceRequestMedia = false) => {
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true, video: true }); // Request permission
+      // Request access only if we need labels or permission
+      if (forceRequestMedia) {
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      }
       const devices = await navigator.mediaDevices.enumerateDevices();
-      setAudioDevices(devices.filter(d => d.kind === 'audioinput'));
-      setVideoDevices(devices.filter(d => d.kind === 'videoinput'));
-      // Set default devices if not already selected
-      if (!selectedAudioDevice && audioDevices.length > 0) setSelectedAudioDevice(audioDevices[0].deviceId);
-      if (!selectedVideoDevice && videoDevices.length > 0) setSelectedVideoDevice(videoDevices[0].deviceId);
+      const audios = devices.filter(d => d.kind === 'audioinput');
+      const videos = devices.filter(d => d.kind === 'videoinput');
+
+      setAudioDevices(audios);
+      setVideoDevices(videos);
+
+      // set defaults using the freshly enumerated arrays (avoid stale state)
+      if (!selectedAudioDevice && audios.length > 0) {
+        setSelectedAudioDevice(audios[0].deviceId);
+        onDeviceChange?.({ audioDeviceId: audios[0].deviceId, videoDeviceId: selectedVideoDevice || undefined });
+      }
+      if (!selectedVideoDevice && videos.length > 0) {
+        setSelectedVideoDevice(videos[0].deviceId);
+        onDeviceChange?.({ audioDeviceId: selectedAudioDevice || undefined, videoDeviceId: videos[0].deviceId });
+      }
     } catch (err) {
       console.error("Error enumerating devices:", err);
     }
   };
 
   useEffect(() => {
-    getDevices();
-    // Cleanup function for audio context
+    // Try to enumerate devices without forcing permission prompt first,
+    // but if label-less devices are returned, request permission on user refresh.
+    getDevices(false);
+
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       analyserRef.current?.disconnect();
       sourceRef.current?.disconnect();
-      audioContextRef.current?.close().catch(console.error);
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+      }
+      // stop any created preview stream
+      stream?.getTracks().forEach(t => t.stop());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const startStream = async () => {
+      // Stop previous stream
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -64,9 +88,15 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
 
       try {
         const constraints: MediaStreamConstraints = {
-          audio: audioEnabled ? { deviceId: selectedAudioDevice ? { exact: selectedAudioDevice } : undefined } : false,
-          video: videoEnabled ? { deviceId: selectedVideoDevice ? { exact: selectedVideoDevice } : undefined } : false,
+          audio: audioEnabled ? (selectedAudioDevice ? { deviceId: { exact: selectedAudioDevice } } : true) : false,
+          video: videoEnabled ? (selectedVideoDevice ? { deviceId: { exact: selectedVideoDevice } } : true) : false,
         };
+        if (!audioEnabled && !videoEnabled) {
+          setStream(null);
+          if (videoRef.current) videoRef.current.srcObject = null;
+          if (audioMeterRef.current) audioMeterRef.current.style.width = '0%';
+          return;
+        }
         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
         setStream(newStream);
         if (videoRef.current) {
@@ -76,13 +106,13 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
         // Setup audio meter if audio is enabled
         if (audioEnabled && newStream.getAudioTracks().length > 0) {
           if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-             audioContextRef.current = new AudioContext();
+            audioContextRef.current = new AudioContext();
           }
           analyserRef.current = audioContextRef.current.createAnalyser();
           analyserRef.current.fftSize = 256;
           sourceRef.current = audioContextRef.current.createMediaStreamSource(newStream);
           sourceRef.current.connect(analyserRef.current);
-          
+
           const bufferLength = analyserRef.current.frequencyBinCount;
           const dataArray = new Uint8Array(bufferLength);
 
@@ -97,31 +127,31 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
           };
           updateMeter();
         } else {
-            if (audioMeterRef.current) audioMeterRef.current.style.width = '0%';
+          if (audioMeterRef.current) audioMeterRef.current.style.width = '0%';
         }
-
       } catch (err) {
         console.error("Error getting media stream:", err);
         setStream(null); // Clear stream on error
-         if (audioMeterRef.current) audioMeterRef.current.style.width = '0%';
+        if (audioMeterRef.current) audioMeterRef.current.style.width = '0%';
       }
     };
 
     startStream();
 
-    // Cleanup stream on component unmount or when dependencies change
     return () => {
-      stream?.getTracks().forEach(track => track.stop());
-       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-       analyserRef.current?.disconnect();
-       sourceRef.current?.disconnect();
-       if (audioMeterRef.current) audioMeterRef.current.style.width = '0%';
+      // cleanup handled in outer effect too
     };
-  }, [audioEnabled, videoEnabled, selectedAudioDevice, selectedVideoDevice]); // Re-run when settings change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioEnabled, videoEnabled, selectedAudioDevice, selectedVideoDevice]);
 
   useEffect(() => {
     onPreferencesChange({ audioEnabled, videoEnabled });
   }, [audioEnabled, videoEnabled, onPreferencesChange]);
+
+  // notify parent when devices change
+  useEffect(() => {
+    onDeviceChange?.({ audioDeviceId: selectedAudioDevice || undefined, videoDeviceId: selectedVideoDevice || undefined });
+  }, [selectedAudioDevice, selectedVideoDevice, onDeviceChange]);
 
   const toggleAudio = () => setAudioEnabled(prev => !prev);
   const toggleVideo = () => setVideoEnabled(prev => !prev);
@@ -190,9 +220,11 @@ const DevicePreview: React.FC<DevicePreviewProps> = ({
           {videoDevices.length === 0 && <option>No video devices</option>}
         </select>
       </div>
-       <button className="btn btn-sm btn-outline-secondary mt-2 w-100" onClick={getDevices}>
-        <FiRefreshCw size={14} className="me-1"/> Refresh Devices
-       </button>
+       <div className="d-grid mt-2">
+         <button className="btn btn-sm btn-outline-secondary w-100" onClick={() => getDevices(true)}>
+          <FiRefreshCw size={14} className="me-1"/> Refresh Devices
+         </button>
+       </div>
     </motion.div>
   );
 };

@@ -26,7 +26,7 @@ const marketingTexts = [
 const PreJoinMeeting: React.FC = () => {
     const location = useLocation();
     const { theme, toggleTheme } = useContext(UserContext); // Get theme and toggle function
-
+    const [prefDevice, setPrefDevice] = useState<{ audioDeviceId?: string, videoDeviceId?: string }>({ audioDeviceId: "", videoDeviceId: "" });
     const [userName, setUserName] = useState('');
     const [email, setEmail] = useState('');
     const [room, setRoom] = useState('');
@@ -105,8 +105,8 @@ const PreJoinMeeting: React.FC = () => {
     };
 
     const handlePreferencesChange = useCallback((prefs: { audioEnabled: boolean; videoEnabled: boolean }) => {
-     setDevicePrefs(prefs);
-  }, []);
+        setDevicePrefs(prefs);
+    }, []);
 
     // **FIX**: Conditionally render MeetingCore if verified
     if (isVerified) {
@@ -117,7 +117,8 @@ const PreJoinMeeting: React.FC = () => {
                 email={email}
                 theme={theme}
                 initialAudioEnabled={devicePrefs.audioEnabled}
-                initialVideoEnabled={devicePrefs.videoEnabled}
+                initialVideoEnabled={devicePrefs.videoEnabled}     
+                prefDevice={prefDevice}           
             />
         );
     }
@@ -200,6 +201,9 @@ const PreJoinMeeting: React.FC = () => {
                             initialAudioEnabled={devicePrefs.audioEnabled}
                             initialVideoEnabled={devicePrefs.videoEnabled}
                             onPreferencesChange={handlePreferencesChange}
+                            onDeviceChange={(dev) => {
+                                setPrefDevice(dev);
+                            }}
                         />
                         <form onSubmit={handleSubmit(onCodeSubmit)} className="mt-4">
                             <div className="form-floating mb-3">

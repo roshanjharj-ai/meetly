@@ -63,7 +63,6 @@ class WebRTCManager {
   screenStream: MediaStream | null = null;
   screenSenders: Record<string, RTCRtpSender[]> = {};
 
-  // --- FIX: Add missing property to track the current screen sharer ---
   sharingBy: string | null = null;
 
   creatingPeer: Record<string, boolean> = {};
@@ -84,6 +83,9 @@ class WebRTCManager {
   onUsersCount?: (n: number) => void;
   onRecordingUpdate?: (is_recording: boolean) => void;
   onSpeakerUpdate?: (speakers: Record<string, boolean>) => void;
+  // New callback to inform when localStream is created/updated
+  onLocalStream?: (s: MediaStream | null) => void;
+
   iceConfig: RTCConfiguration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
   private initialAudioEnabled: boolean = true;
@@ -126,8 +128,8 @@ class WebRTCManager {
     }
 
     const constraints = {
-      audio: audioEnabled ? true : false, // Request if enabled
-      video: videoEnabled ? true : false, // Request if enabled
+      audio: audioEnabled ? true : false,
+      video: videoEnabled ? true : false,
     };
 
     try {
@@ -136,22 +138,29 @@ class WebRTCManager {
       // Ensure tracks match initial state even after getting stream
       this.localStream.getAudioTracks().forEach(t => t.enabled = this.initialAudioEnabled);
       this.localStream.getVideoTracks().forEach(t => t.enabled = this.initialVideoEnabled);
+      // Inform listeners
+      this.onLocalStream?.(this.localStream);
       return this.localStream;
     } catch (err) {
       this.log("Initial getUserMedia failed:", err);
-      this.localStream = null; // Ensure stream is null on failure
-      throw err; // Re-throw error to be handled by caller
+      this.localStream = null;
+      this.onLocalStream?.(null);
+      throw err;
     }
   }
 
   async connect(initialAudioEnabled: boolean = true, initialVideoEnabled: boolean = true) {
     try {
-      // Pass initial state down
-      await this.ensureLocalStream(initialAudioEnabled, initialVideoEnabled);
+      // Pass initial state down and make sure localStream is attempted
+      try {
+        await this.ensureLocalStream(initialAudioEnabled, initialVideoEnabled);
+      } catch (err) {
+        this.log("Could not get initial media stream, proceeding without it.", err);
+      }
     } catch (err) {
-      this.log("Could not get initial media stream, proceeding without it.", err);
-      // Connection attempt continues, user can enable devices later
+      // no-op
     }
+
     this.log("Connecting to WS:", this.wsUrl);
     const ws = new WebSocket(this.wsUrl);
     this.ws = ws;
@@ -172,20 +181,19 @@ class WebRTCManager {
   disconnect() {
     this.log("?? Manager disconnect initiated");
 
-    // Function to safely stop tracks
     const stopMediaStream = (stream: MediaStream | null, streamName: string) => {
         if (stream) {
             this.log(`Stopping ${streamName} tracks...`);
             let stoppedCount = 0;
             stream.getTracks().forEach((track) => {
-                if (track.readyState === 'live') { // Only stop live tracks
+                if (track.readyState === 'live') {
                     track.stop();
                     stoppedCount++;
                     this.log(`Stopped ${streamName} track: ${track.kind} (${track.label || track.id})`);
                 }
             });
             this.log(`${stoppedCount} ${streamName} tracks stopped.`);
-            return null; // Return null to clear the reference
+            return null;
         } else {
             this.log(`No active ${streamName} to stop.`);
             return null;
@@ -198,17 +206,27 @@ class WebRTCManager {
 
     // 2. Close peer connections
     this.log("Closing peer connections...");
-    // Object.entries(this.peers).forEach(([peerId, pc]) => { /* ... (same as before) */ });
+    Object.keys(this.peers).forEach(peerId => {
+      try {
+        this.peers[peerId].close();
+      } catch {}
+    });
     this.peers = {}; this.dataChannels = {}; this.screenSenders = {}; this.sharingBy = null;
 
     // 3. Close WebSocket connection
-    if (this.ws && this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) { /* ... (same as before) */ }
+    if (this.ws && this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) {
+      try { this.ws.close(); } catch {}
+    }
     this.ws = null;
 
     // 4. Reset state callbacks
     this.log("Resetting state callbacks...");
-    this.onUsers?.([]); this.onSharingBy?.(null);
-    this.onRemoteStream?.('', null); this.onRemoteScreen?.('', null);
+    this.onUsers?.([]);
+    this.onUsersCount?.(0);
+    this.onSharingBy?.(null);
+    this.onRemoteStream?.('', null);
+    this.onRemoteScreen?.('', null);
+    this.onLocalStream?.(null);
 
     this.log("?? Disconnect completed.");
   }
@@ -231,10 +249,9 @@ class WebRTCManager {
           if (!this.peers[peerId] && !this.creatingPeer[peerId]) {
             if (isRecorderBot(peerId)) {
               this.log(`Recorder Bot '${peerId}' detected. Passively waiting for its offer.`);
-              continue; // Be passive ONLY to the recorder.
+              continue;
             }
             const isBot = DEFAULT_BOT_NAMES.includes(peerId);
-            // To maintain consistent initiator, sort lexicographically
             const initiator = isBot || this.userId < peerId;
             this.createPeer(peerId, initiator);
           }
@@ -242,7 +259,7 @@ class WebRTCManager {
         break;
       case "bot_audio": this.onBotAudio?.(msg.data || msg.payload || "", msg.format, msg.speaker); break;
       case "bot_message":
-        const m: ChatMessagePayload = { id: `bot-${Date.now()}`, from: msg.speaker || "Bot", text: msg.message || msg.payload as string, ts: Date.now() };
+        const m: ChatMessagePayload = { id: `bot-${Date.now()}`, from: msg.speaker || "Bot", text: msg.message || (msg.payload as string), ts: Date.now() };
         this.onBotMessage?.(m);
         this.onChat?.(m);
         break;
@@ -286,7 +303,6 @@ class WebRTCManager {
       if (obj.type === "content_update") this.onSharedContent?.(obj.payload);
       else if (obj.type === "status_update") this.onPeerStatus?.(peerId, obj.payload);
       else if (obj.type === "chat_message") this.onChat?.(obj.payload);
-      // --- FIX: Handle screen sharing updates from peers ---
       else if (obj.type === "screen_update") {
         const sharing = obj.payload.sharing;
         const sharer = obj.payload.by;
@@ -299,7 +315,8 @@ class WebRTCManager {
   }
 
   private attachLocalTracks(pc: RTCPeerConnection) {
-    this.localStream?.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
+    if (!this.localStream) return;
+    this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
   }
 
   async createPeer(targetId: string, initiator: boolean): Promise<RTCPeerConnection> {
@@ -311,9 +328,6 @@ class WebRTCManager {
     pc.onicecandidate = e => { if (e.candidate) this.wsSend({ type: "signal", action: "ice", from: this.userId, to: targetId, payload: e.candidate }); };
     pc.ontrack = evt => {
       const stream = evt.streams[0];
-      // Differentiate between regular video and screen share.
-      // Screen shares are typically added after initial connection.
-      // A simple heuristic: if a video track is added and someone is known to be sharing, it's the screen.
       if (evt.track.kind === 'video' && this.sharingBy && this.sharingBy === targetId) {
         this.onRemoteScreen?.(targetId, stream);
       } else {
@@ -324,6 +338,7 @@ class WebRTCManager {
       if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
         this.onRemoteStream?.(targetId, null);
         this.onRemoteScreen?.(targetId, null);
+        try { pc.close(); } catch {}
         delete this.peers[targetId];
       }
     };
@@ -339,6 +354,7 @@ class WebRTCManager {
       };
     }
 
+    // Add local tracks (if available)
     this.attachLocalTracks(pc);
 
     if (initiator) {
@@ -354,6 +370,64 @@ class WebRTCManager {
     this.peers[targetId] = pc;
     delete this.creatingPeer[targetId];
     return pc;
+  }
+
+  // Replace audio/video track across all peer connections and update localStream
+  async setAudioDevice(deviceId: string | null) {
+    try {
+      const newStream = deviceId ? await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: deviceId } } }) : null;
+      const newTrack = newStream?.getAudioTracks()[0] ?? null;
+
+      // Replace senders' audio track with newTrack
+      Object.values(this.peers).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+        if (sender) {
+          sender.replaceTrack(newTrack).catch(err => this.log("replaceTrack audio failed", err));
+        } else if (newTrack) {
+          pc.addTrack(newTrack, newStream!);
+        }
+      });
+
+      // Update localStream: remove old audio tracks and add new one
+      if (this.localStream) {
+        this.localStream.getAudioTracks().forEach(t => { try { t.stop(); } catch {} });
+        if (newTrack) this.localStream.addTrack(newTrack);
+      } else if (newStream) {
+        this.localStream = new MediaStream([ ...(newStream.getTracks()) ]);
+      }
+
+      // Inform listeners
+      this.onLocalStream?.(this.localStream);
+    } catch (err) {
+      this.log("setAudioDevice failed", err);
+    }
+  }
+
+  async setVideoDevice(deviceId: string | null) {
+    try {
+      const newStream = deviceId ? await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } }) : null;
+      const newTrack = newStream?.getVideoTracks()[0] ?? null;
+
+      Object.values(this.peers).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(newTrack).catch(err => this.log("replaceTrack video failed", err));
+        } else if (newTrack) {
+          pc.addTrack(newTrack, newStream!);
+        }
+      });
+
+      if (this.localStream) {
+        this.localStream.getVideoTracks().forEach(t => { try { t.stop(); } catch {} });
+        if (newTrack) this.localStream.addTrack(newTrack);
+      } else if (newStream) {
+        this.localStream = new MediaStream([ ...(newStream.getTracks()) ]);
+      }
+
+      this.onLocalStream?.(this.localStream);
+    } catch (err) {
+      this.log("setVideoDevice failed", err);
+    }
   }
 
   async startScreenShare(audioMode: "none" | "mic" | "system" = "none") {
@@ -393,7 +467,9 @@ class WebRTCManager {
     Object.entries(this.screenSenders).forEach(([peerId, senders]) => {
       const pc = this.peers[peerId];
       if (pc) {
-        senders.forEach(sender => pc.removeTrack(sender));
+        senders.forEach(sender => {
+          try { pc.removeTrack(sender); } catch {}
+        });
       }
     });
     this.screenSenders = {};
@@ -405,7 +481,7 @@ class WebRTCManager {
   broadcastDataChannel(message: DataChannelMessage) {
     const s = JSON.stringify(message);
     Object.values(this.dataChannels).forEach((dc) => {
-      if (dc.readyState === "open") dc.send(s);
+      try { if (dc.readyState === "open") dc.send(s); } catch (err) { this.log("dc send err", err); }
     });
   }
 
@@ -444,7 +520,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     const mgr = mgrRef.current;
 
     mgr.onUsers = setUsers;
-    // --- FIX: Robustly handle adding/removing streams from state ---
+    mgr.onLocalStream = (s) => setLocalStream(s);
+
     mgr.onRemoteStream = (peerId, stream) => {
       setRemoteStreams(prev => {
         const newState = { ...prev };
@@ -498,22 +575,20 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     return () => {
       console.log("[useWebRTC Cleanup] Hook unmounting. Disconnecting manager...");
       if (mgrRef.current) {
-        mgrRef.current.disconnect(); // Call the robust disconnect
-        mgrRef.current = null; // Clear the ref after disconnect
+        mgrRef.current.disconnect();
+        mgrRef.current = null;
       }
-       // Explicitly reset states managed by the hook itself
-       setLocalStream(null);
-       setUsers([]);
-       setRemoteStreams({});
-       setRemoteScreens({});
-       setSharingBy(null);
-       setPeerStatus({});
-       setIsScreenSharing(false);
-       setSpeaking(false);
-       // setChatMessages([]); // Optional: clear chat on unmount
-       // setMeetingProgress(null); // Optional: clear progress on unmount
-       console.log("[useWebRTC Cleanup] Manager and hook state reset.");
+      setLocalStream(null);
+      setUsers([]);
+      setRemoteStreams({});
+      setRemoteScreens({});
+      setSharingBy(null);
+      setPeerStatus({});
+      setIsScreenSharing(false);
+      setSpeaking(false);
+      console.log("[useWebRTC Cleanup] Manager and hook state reset.");
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room, userId, signalingBase]);
 
   const startRecording = useCallback(async () => {
@@ -528,10 +603,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to start recording');
       }
-      // The WebSocket 'recording_update' message will set isRecording to true
     } catch (error) {
       console.error("Error starting recording:", error);
-      // Optionally show an error to the user
     } finally {
       setIsRecordingLoading(false);
     }
@@ -549,7 +622,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to stop recording');
       }
-      // The WebSocket 'recording_update' message will set isRecording to false
     } catch (error) {
       console.error("Error stopping recording:", error);
     } finally {
@@ -561,9 +633,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     if (!mgrRef.current) return;
     try {
       await mgrRef.current.connect(initialAudioEnabled, initialVideoEnabled);
-      // Update local stream state *after* connection attempt
+      // Update local stream state after connection attempt (manager.onLocalStream will also notify)
       setLocalStream(mgrRef.current.localStream);
-      await mgrRef.current.connect();
     } catch (err) {
       console.error("Connect error:", err);
     }
@@ -609,31 +680,59 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const disconnect = useCallback(() => {
     console.log("[useWebRTC disconnect] Hook disconnect called.");
     if (mgrRef.current) {
-        mgrRef.current.disconnect(); // Calls the robust manager disconnect
-         // Reset hook state immediately
-         setLocalStream(null);
-         setUsers([]);
-         setRemoteStreams({});
-         setRemoteScreens({});
-         setSharingBy(null);
-         setPeerStatus({});
-         setIsScreenSharing(false);
-         setSpeaking(false);
-         console.log("[useWebRTC disconnect] Local state reset.");
+        mgrRef.current.disconnect();
+        setLocalStream(null);
+        setUsers([]);
+        setRemoteStreams({});
+        setRemoteScreens({});
+        setSharingBy(null);
+        setPeerStatus({});
+        setIsScreenSharing(false);
+        setSpeaking(false);
+        console.log("[useWebRTC disconnect] Local state reset.");
     } else {
         console.warn("[useWebRTC disconnect] Manager ref already null.");
     }
   }, []);
   const startScreenShare = useCallback(async (audioMode: "none" | "mic" | "system" = "none") => { await mgrRef.current?.startScreenShare(audioMode); setIsScreenSharing(true); }, []);
   const stopScreenShare = useCallback(() => { mgrRef.current?.stopScreenShare(); setIsScreenSharing(false); }, []);
-  // const startRecording = useCallback(() => mgrRef.current?.startRecording(), []);
-  // const stopRecording = useCallback(() => mgrRef.current?.stopRecording(), []);
   const sendContentUpdate = useCallback((content: string) => mgrRef.current?.sendContentUpdate(content), []);
   const broadcastStatus = useCallback((status: PeerStatus) => { mgrRef.current?.broadcastStatus(status); setPeerStatus((prev) => ({ ...prev, [userId]: status })); }, [userId]);
   const sendChatMessage = useCallback((msg: ChatMessagePayload) => { mgrRef.current?.sendChatMessage(msg); setChatMessages((prev) => [...prev, msg]); }, []);
   const getLocalStream = useCallback(() => mgrRef.current?.localStream ?? null, []);
+  // Expose device selection helpers
+  const selectAudioDevice = useCallback((deviceId: string | null) => { mgrRef.current?.setAudioDevice(deviceId); }, []);
+  const selectVideoDevice = useCallback((deviceId: string | null) => { mgrRef.current?.setVideoDevice(deviceId); }, []);
 
   return {
-    connect, disconnect, users, remoteStreams, remoteScreens, sharingBy, getLocalStream, sendContentUpdate, peerStatus, broadcastStatus, startScreenShare, stopScreenShare, isScreenSharing, chatMessages, sendChatMessage, botActive, botSpeaker, sharedContent, speaking, startRecording, stopRecording, isRecording, speakers, isRecordingLoading, meetingProgress
+    connect,
+    disconnect,
+    users,
+    remoteStreams,
+    remoteScreens,
+    sharingBy,
+    getLocalStream,
+    sendContentUpdate,
+    peerStatus,
+    broadcastStatus,
+    startScreenShare,
+    stopScreenShare,
+    isScreenSharing,
+    chatMessages,
+    sendChatMessage,
+    botActive,
+    botSpeaker,
+    sharedContent,
+    speaking,
+    startRecording,
+    stopRecording,
+    isRecording,
+    speakers,
+    isRecordingLoading,
+    meetingProgress,
+    // exposed helpers
+    selectAudioDevice,
+    selectVideoDevice,
+    localStream,
   };
 }

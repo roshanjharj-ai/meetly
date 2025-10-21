@@ -11,6 +11,7 @@ export default function JoinMeeting() {
     const [showPreview, setShowPreview] = useState(false); // State to control preview visibility
     const [devicePrefs, setDevicePrefs] = useState({ audioEnabled: true, videoEnabled: true }); // State for preferences
     const [isValidating, setIsValidating] = useState(false); // State for loading indicator
+    const [prefDevice, setPrefDevice] = useState<{ audioDeviceId?: string, videoDeviceId?: string }>({ audioDeviceId: "", videoDeviceId: "" });
     const navigate = useNavigate();
     const userContext = useContext(UserContext);
 
@@ -23,8 +24,9 @@ export default function JoinMeeting() {
     };
 
     const handleFinalJoin = () => {
-         if (userContext.user?.user_name) {
-            navigate(`/meet?room=${encodeURIComponent(roomId.trim())}&user=${encodeURIComponent(userContext.user.user_name)}`, {
+        if (userContext.user?.user_name) {
+            let prefDeviceString = (typeof prefDevice != 'undefined') ? "&prefDeviceString=" + encodeURIComponent(JSON.stringify(prefDevice)) : "";
+            navigate(`/meet?room=${encodeURIComponent(roomId.trim())}&user=${encodeURIComponent(userContext.user.user_name)}${prefDeviceString}`, {
                 state: { initialAudioEnabled: devicePrefs.audioEnabled, initialVideoEnabled: devicePrefs.videoEnabled, }
             });
         } else {
@@ -75,7 +77,7 @@ export default function JoinMeeting() {
                                         {error && <div id="error-feedback" className="invalid-feedback d-block">{error}</div>}
                                     </div>
                                     <button type="submit" className="btn btn-primary w-100 btn-lg d-flex align-items-center justify-content-center gap-2" disabled={isValidating}>
-                                        {isValidating ? <><FiLoader className="animate-spin me-2"/> Checking...</> : <>Next <FiArrowRight /></>}
+                                        {isValidating ? <><FiLoader className="animate-spin me-2" /> Checking...</> : <>Next <FiArrowRight /></>}
                                     </button>
                                 </form>
                             </motion.div>
@@ -92,10 +94,11 @@ export default function JoinMeeting() {
                                     initialAudioEnabled={devicePrefs.audioEnabled}
                                     initialVideoEnabled={devicePrefs.videoEnabled}
                                     onPreferencesChange={handlePreferencesChange}
+                                    onDeviceChange={setPrefDevice}
                                 />
                                 <div className="d-flex gap-2 mt-4">
-                                     <button className="btn btn-secondary w-50" onClick={() => setShowPreview(false)}>Back</button>
-                                     <button className="btn btn-success w-50" onClick={handleFinalJoin}>Join Now</button>
+                                    <button className="btn btn-secondary w-50" onClick={() => setShowPreview(false)}>Back</button>
+                                    <button className="btn btn-success w-50" onClick={handleFinalJoin}>Join Now</button>
                                 </div>
                                 {error && <div className="alert alert-danger mt-3">{error}</div>}
                             </motion.div>

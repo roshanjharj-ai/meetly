@@ -15,16 +15,27 @@ const MeetingHome: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [initialAudioEnabled, setInitialAudioEnabled] = useState<boolean>(true);
     const [initialVideoEnabled, setInitialVideoEnabled] = useState<boolean>(true);
+    const [prefDevice, setPrefDevice] = useState<{ audioDeviceId?: string, videoDeviceId?: string }>({ audioDeviceId: "", videoDeviceId: "" });
 
     useEffect(() => {
         const urlRoom = searchParams.get("room");
         const urlUser = searchParams.get("user");
+        const devicePrefParam = searchParams.get("prefDevice");
 
         if (!urlRoom) {
             setError("Room ID is missing from the URL.");
             return;
         }
         setRoom(urlRoom);
+
+        if (devicePrefParam) {
+            try {
+                const parsedPrefDevice = JSON.parse(decodeURIComponent(devicePrefParam));
+                setPrefDevice(parsedPrefDevice);
+            } catch (e) {
+                console.error("Failed to parse prefDevice from URL:", e);
+            }
+        }
 
         // Determine user name (same logic as before)
         if (!isUserLoading && user?.user_name) {
@@ -70,7 +81,7 @@ const MeetingHome: React.FC = () => {
 
     // **FIX**: Pass the theme prop down to MeetingCore
     return <MeetingCore room={room} userName={userName} email={userEmail} theme={theme} initialAudioEnabled={initialAudioEnabled}
-        initialVideoEnabled={initialVideoEnabled} />;
+        initialVideoEnabled={initialVideoEnabled} prefDevice={prefDevice} />;
 };
 
 export default MeetingHome;
