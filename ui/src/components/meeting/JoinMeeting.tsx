@@ -1,5 +1,5 @@
-import { useContext, useState, useCallback } from 'react'; // **FIX**: Import useCallback
-import { useNavigate } from 'react-router-dom';
+import { useContext, useState, useCallback, useEffect } from 'react'; // **FIX**: Import useCallback
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FiArrowRight, FiVideo, FiLoader } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UserContext } from '../../context/UserContext';
@@ -22,6 +22,14 @@ export default function JoinMeeting() {
         await new Promise(resolve => setTimeout(resolve, 500));
         setIsValidating(false); setShowPreview(true);
     };
+
+    const location = useLocation();
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        let roomParam = params.get("room");
+        if (roomParam) setRoomId(roomParam);
+    }, [location.search])
 
     const handleFinalJoin = () => {
         if (userContext.user?.user_name) {

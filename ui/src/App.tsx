@@ -62,6 +62,7 @@ export default function App() {
             {/* All protected routes are children of the MainLayout */}
             <Route element={<MainLayout onLogout={logout} />}>
               <Route path="/" element={<Home user={user} />} />
+              <Route path="/prejoin" element={<JoinMeeting />} />
               <Route path="/join" element={<JoinMeeting />} />
               <Route path="/meetings" element={<MeetingList />} />
               <Route path="/participants" element={<ParticipantManager />} />
