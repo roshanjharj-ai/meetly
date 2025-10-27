@@ -5,7 +5,6 @@ import useMediaQuery from '../../hooks/useMediaQuery';
 import { createMeeting, deleteMeeting, getMeetings, updateMeeting } from '../../services/api';
 import type { CreateMeetingRequest, Meeting } from '../../types/meeting.types';
 import AlertModal from '../shared/AlertModal';
-import Spinner from '../shared/Spinner';
 import MeetingDrawer from './MeetingDrawer';
 
 const ParticipantsPanel = ({ meeting, onClose }: { meeting: Meeting | undefined; onClose: () => void; }) => {
@@ -30,8 +29,64 @@ const ParticipantsPanel = ({ meeting, onClose }: { meeting: Meeting | undefined;
     )
 }
 
+// --- NEW SKELETON COMPONENT ---
+const MeetingCardSkeleton = () => (
+    <div className="card border-secondary placeholder-glow">
+        <div className="card-body">
+            <div className="d-flex justify-content-between">
+                {/* Title and Action Buttons */}
+                <div className="placeholder w-50" style={{ height: '24px' }}></div>
+                <div className="d-flex gap-2">
+                    <div className="placeholder btn btn-sm btn-outline-secondary" style={{ width: '30px', height: '30px' }}></div>
+                    <div className="placeholder btn btn-sm btn-outline-danger" style={{ width: '30px', height: '30px' }}></div>
+                </div>
+            </div>
+            {/* Datetime */}
+            <h6 className="card-subtitle mb-2 text-body-secondary d-flex align-items-center gap-2 small mt-2">
+                <div className="placeholder w-75" style={{ height: '18px' }}></div>
+            </h6>
+            {/* Agenda */}
+            <p className="card-text small">
+                <div className="placeholder w-100 mb-1"></div>
+                <div className="placeholder w-50"></div>
+            </p>
+            {/* Participants and View All */}
+            <div className="d-flex align-items-center gap-3 mt-3">
+                <div className="d-flex">
+                    <span className="placeholder badge rounded-pill bg-secondary me-1" style={{ width: '25px' }}></span>
+                    <span className="placeholder badge rounded-pill bg-secondary me-1" style={{ width: '25px' }}></span>
+                    <span className="placeholder badge rounded-pill bg-secondary me-1" style={{ width: '25px' }}></span>
+                </div>
+                <div className="placeholder btn btn-link btn-sm p-0" style={{ width: '100px', height: '20px' }}></div>
+            </div>
+        </div>
+    </div>
+);
+
+const MeetingListSkeleton = () => (
+    <main className="flex-grow-1 p-3 p-md-4 overflow-auto">
+        {/* Header Skeleton */}
+        <div className="d-flex flex-column flex-md-row justify-content-md-between align-items-md-center mb-4 gap-3 placeholder-glow">
+          <div className="d-flex align-items-center gap-3">
+             <div className="placeholder w-50" style={{ height: '30px' }}></div>
+          </div>
+          <div className="placeholder btn btn-primary" style={{ width: '150px', height: '38px' }}></div>
+        </div>
+        
+        {/* List Skeletons */}
+        <div className="vstack gap-3">
+            <MeetingCardSkeleton />
+            <MeetingCardSkeleton />
+            <MeetingCardSkeleton />
+        </div>
+    </main>
+);
+// --- END SKELETON COMPONENT ---
+
+
 export default function MeetingList() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  // Use state to track loading: true/false
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -43,6 +98,9 @@ export default function MeetingList() {
   const fetchMeetings = async () => {
     setIsLoading(true);
     try {
+      // Adding a small delay to clearly show the skeleton effect
+      await new Promise(resolve => setTimeout(resolve, 500)); 
+
       const data = await getMeetings();
       setMeetings(data.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()));
     } catch (error) {
@@ -102,7 +160,9 @@ export default function MeetingList() {
       });
   };
 
-  if (isLoading) return <div className="vh-100 d-flex align-items-center justify-content-center"><Spinner /></div>;
+  // Renders the skeleton during loading
+  if (isLoading) return <div className="d-flex" style={{ height: "100%" }}><MeetingListSkeleton /></div>; 
+  
   const activeMeetingForPanel = meetings.find(m => m.id === activeParticipantsPanel);
 
   return (

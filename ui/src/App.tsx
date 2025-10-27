@@ -7,7 +7,6 @@ import MainLayout from './components/MainLayout';
 // Import all your page components
 import "./App.css";
 import CalendarView from './components/calendar/CalendarView';
-import Home from './components/home/Home';
 import JoinMeeting from './components/meeting/JoinMeeting';
 import Signup from './components/meeting/Signup';
 import StartMeeting from './components/meeting/StartMeeting';
@@ -15,7 +14,10 @@ import MeetingList from './components/meetingList/MeetingList';
 import ParticipantManager from './components/participant/ParticipantManager';
 
 import "./App.css";
+import DashboardHome from './components/Dashboard';
 import UserProfile from './components/UserProfile';
+import BotDetail from './components/bot/BotDetail';
+import BotManager from './components/bot/BotManager';
 import MeetingHome from './components/meeting/MeetingHome';
 import PreJoinMeeting from './components/meeting/PreJoinMeeting';
 
@@ -61,11 +63,13 @@ export default function App() {
           <Routes>
             {/* All protected routes are children of the MainLayout */}
             <Route element={<MainLayout onLogout={logout} />}>
-              <Route path="/" element={<Home user={user} />} />
+              <Route path="/" element={<DashboardHome user={user} />} />
               <Route path="/prejoin" element={<JoinMeeting />} />
               <Route path="/join" element={<JoinMeeting />} />
               <Route path="/meetings" element={<MeetingList />} />
               <Route path="/participants" element={<ParticipantManager />} />
+              <Route path='/bots' element={<BotManager />} />
+              <Route path='/bots/:botId' element={<BotDetail />} />
               <Route path="/calendar" element={<CalendarView />} />
               <Route path="/meet/*" element={<MeetingHome />} />
               <Route path="/profile" element={<UserProfile />} />

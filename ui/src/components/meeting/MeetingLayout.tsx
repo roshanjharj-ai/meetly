@@ -12,7 +12,7 @@ import {
   BsPinAngle,
   BsPinAngleFill,
   BsRobot,
-  BsSoundwave, // <-- NEW: Import soundwave icon
+  BsSoundwave,
 } from "react-icons/bs";
 import {
   FaMicrophoneSlash,
@@ -49,7 +49,7 @@ type MeetingLayoutProps = {
   users: User[];
   botNames: string[];
   botSpeaker: string;
-  sharingBy: string | null; // <-- We will use this in the side pane logic
+  sharingBy: string | null;
   sharedContent: string | null;
   remoteScreenStream: MediaStream | null;
   pinnedUserId: string | null;
@@ -286,10 +286,10 @@ const FloatingBot = ({
 }) => {
   const dragControls = useDragControls();
 
-  // *** 3. ADD a ref to the bot element itself ***
+  // 3. ADD a ref to the bot element itself
   const botRef = useRef<HTMLDivElement>(null);
 
-  // *** 4. ADD state to hold the dynamic constraints ***
+  // 4. ADD state to hold the dynamic constraints
   const [dragConstraints, setDragConstraints] = useState({
     top: 0,
     left: 0,
@@ -297,43 +297,43 @@ const FloatingBot = ({
     bottom: 0,
   });
 
-  // *** 5. ADD effect to calculate viewport constraints ***
+  // 5. ADD effect to calculate viewport constraints
   useLayoutEffect(() => {
     const botEl = botRef.current;
     if (!botEl) return;
 
-    // Function to update constraints
     const updateConstraints = () => {
+      // Use window.innerHeight / innerWidth as the container boundaries (viewport)
       const { innerWidth, innerHeight } = window;
-      const { width, height } = botEl.getBoundingClientRect();
+      const { width, height, top, left } = botEl.getBoundingClientRect();
 
       setDragConstraints({
-        top: 0,
-        left: 0,
-        right: innerWidth - width,   // Constrain right edge
-        bottom: innerHeight - height, // Constrain bottom edge
+        // The constraints are relative to the initial position (top: 1.5rem, left: 1.5rem)
+        // Set constraints relative to the viewport edges
+        top: -top,
+        left: -left,
+        right: innerWidth - (left + width),   
+        bottom: innerHeight - (top + height), 
       });
     };
 
-    // Calculate constraints on mount
     updateConstraints();
 
-    // Recalculate on window resize
     window.addEventListener("resize", updateConstraints);
     return () => window.removeEventListener("resize", updateConstraints);
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []); 
 
   return (
     <motion.div
-      ref={botRef} // *** 6. ATTACH the ref ***
+      ref={botRef} // 6. ATTACH the ref
       className="floating-bot"
       drag
       dragControls={dragControls}
       dragListener={false}
       whileDrag={{ scale: 1.1, boxShadow: "0px 10px 30px rgba(0,0,0,0.3)" }}
       data-speaking={isSpeaking}
-      dragConstraints={dragConstraints} // *** 7. APPLY the dynamic constraints ***
-      dragElastic={0} // *** 8. SET elastic to 0 to prevent bouncing past the edge ***
+      dragConstraints={dragConstraints} // 7. APPLY the dynamic constraints
+      dragElastic={0} // 8. SET elastic to 0 to prevent bouncing past the edge
     >
       <motion.div
         className="floating-bot-icon"
@@ -351,7 +351,7 @@ const FloatingBot = ({
 
       <div className="floating-bot-name">{user.id}</div>
 
-      {/* Speaking Animation (from previous step) */}
+      {/* Speaking Animation */}
       <AnimatePresence>
         {isSpeaking && (
           <motion.div
@@ -383,7 +383,7 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
   users,
   botNames,
   botSpeaker,
-  sharingBy, // <-- Prop is here
+  sharingBy,
   sharedContent,
   remoteScreenStream,
   pinnedUserId,
@@ -392,7 +392,6 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
   isMobile,
   isChatSidebarOpen,
 }: MeetingLayoutProps) => {
-  const constraintsRef = useRef<HTMLDivElement>(null);
 
   // --- Filter Users ---
   const humanUsers = useMemo(
@@ -411,23 +410,15 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
     [humanUsers, pinnedUserId]
   );
 
-  // **************************************************
-  // *** FIX 1: Re-order mainViewType logic ***
-  // We check for sharing first, then content, THEN manual pin.
-  // This makes sharing "auto-pin" over a manual pin.
-  // **************************************************
+  // FIX 1: Re-order mainViewType logic to prioritize sharing
   const mainViewType = useMemo(() => {
     if (remoteScreenStream) return "share";
     if (sharedContent) return "content";
     if (pinnedUser) return "pin";
     return "grid";
-  }, [pinnedUser, remoteScreenStream, sharedContent]); // Dependency order doesn't matter, but logic inside does
+  }, [pinnedUser, remoteScreenStream, sharedContent]);
 
-  // **************************************************
-  // *** FIX 2: Update sidePaneUsers logic ***
-  // When sharing, filter out the sharer (`sharingBy`).
-  // When pinned, filter out the pinned user (`pinnedUserId`).
-  // **************************************************
+  // FIX 2: Update sidePaneUsers logic to filter sharer/pinned user
   const sidePaneUsers = useMemo(() => {
     if (mainViewType === "grid") {
       return [];
@@ -440,7 +431,7 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
     }
     // Fallback for "content" or other types
     return humanUsers;
-  }, [humanUsers, mainViewType, pinnedUserId, sharingBy]); // <-- Added sharingBy
+  }, [humanUsers, mainViewType, pinnedUserId, sharingBy]);
 
 
   // --- Screen Share Video Ref ---
@@ -454,7 +445,6 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
 
   return (
     <div
-      // ref={constraintsRef} // <-- REMOVE THIS LINE
       className="meeting-layout-container"
       data-bs-theme={theme}
     >
@@ -465,7 +455,6 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
             key={bot.id}
             user={bot}
             isSpeaking={botSpeaker === bot.id}
-          // constraintsRef={constraintsRef} // <-- REMOVE THIS LINE
           />
         ))}
       </AnimatePresence>
@@ -516,7 +505,7 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
 
       {/* --- Side Pane --- */}
       <AnimatePresence>
-        {!isMobile && !isChatSidebarOpen && mainViewType === "pin" && sidePaneUsers.length > 0 && (
+        {!isMobile && !isChatSidebarOpen && mainViewType !== "grid" && sidePaneUsers.length > 0 && (
           <motion.div
             className="meeting-side-pane"
             initial={{ width: 0, opacity: 0 }}

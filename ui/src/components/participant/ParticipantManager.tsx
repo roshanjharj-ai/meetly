@@ -3,8 +3,49 @@ import { FiEdit, FiPlus, FiTrash2, FiUsers } from 'react-icons/fi';
 import { createParticipant, deleteParticipant, getParticipants, updateParticipant } from '../../services/api';
 import type { CreateParticipantRequest, Participant } from '../../types/meeting.types';
 import AlertModal from '../shared/AlertModal';
-import Spinner from '../shared/Spinner';
 import ParticipantDrawer from './ParticipantDrawer';
+
+// --- NEW SKELETON COMPONENTS ---
+
+const ParticipantItemSkeleton = () => (
+    <div className="list-group-item list-group-item-action d-flex justify-content-between align-items-center flex-wrap gap-2 placeholder-glow">
+        <div className="d-flex flex-column gap-1">
+            {/* Name */}
+            <div className="placeholder w-50" style={{ height: '20px' }}></div>
+            {/* Email/Mobile */}
+            <div className="placeholder w-75 small" style={{ height: '15px' }}></div>
+        </div>
+        <div className="d-flex gap-2">
+            {/* Edit Button */}
+            <div className="placeholder btn btn-sm btn-outline-secondary" style={{ width: '30px', height: '30px' }}></div>
+            {/* Delete Button */}
+            <div className="placeholder btn btn-sm btn-outline-danger" style={{ width: '30px', height: '30px' }}></div>
+        </div>
+    </div>
+);
+
+const ParticipantManagerSkeleton = () => (
+    <div className="p-3 p-md-4">
+        {/* Header Skeleton */}
+        <div className="d-flex flex-column flex-md-row justify-content-md-between align-items-md-center mb-4 gap-3 placeholder-glow">
+            <div className="d-flex align-items-center gap-3">
+                <div className="placeholder w-50" style={{ height: '30px' }}></div>
+            </div>
+            <div className="placeholder btn btn-primary" style={{ width: '150px', height: '38px' }}></div>
+        </div>
+        
+        {/* List Skeletons */}
+        <div className="list-group">
+            <ParticipantItemSkeleton />
+            <ParticipantItemSkeleton />
+            <ParticipantItemSkeleton />
+            <ParticipantItemSkeleton />
+            <ParticipantItemSkeleton />
+        </div>
+    </div>
+);
+
+// --- END SKELETON COMPONENTS ---
 
 export default function ParticipantManager() {
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -17,6 +58,9 @@ export default function ParticipantManager() {
   const fetchParticipants = async () => {
     setIsLoading(true);
     try {
+      // Adding a small delay to clearly show the skeleton effect
+      await new Promise(resolve => setTimeout(resolve, 500)); 
+      
       const data = await getParticipants();
       setParticipants(data);
     } catch (error) { 
@@ -75,7 +119,7 @@ export default function ParticipantManager() {
   };
 
   if (isLoading) {
-    return <div className="vh-100 d-flex align-items-center justify-content-center"><Spinner /></div>;
+    return <ParticipantManagerSkeleton />;
   }
 
   return (

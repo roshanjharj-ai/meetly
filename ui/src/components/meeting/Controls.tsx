@@ -100,11 +100,10 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
     return (
         <>
             <style type="text/css">{`
-                /* ... (All existing styles remain unchanged) ... */
                 .controls-container {
                     width: 100%;
                     height: 100%;
-                    display: flex; /* Use flex to center the content */
+                    display: flex;
                     align-items: center;
                     padding: 0 1rem;
                     background-color: rgba(33, 37, 41, 0.6);
@@ -125,7 +124,7 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
                 @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); } }
                 @media (max-width: 767.98px) { .controls-container { padding: 0 0.75rem; } .control-button { width: 48px; height: 48px; } }
                 .status-pill-container {
-                  position: relative; /* For the alert icon */
+                  position: relative;
                   display: flex;
                   align-items: center;
                   gap: 12px;
@@ -211,9 +210,8 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
                         <EndCallButton performAction={performAction} />
                     </div>
 
-                    {/* MODIFIED: Added align-items-center and gap */}
+                    {/* MODIFIED: Added FullScreenButton to desktop controls */}
                     <div className="d-none d-md-flex justify-content-end align-items-center" style={{ minWidth: '200px', gap: '1rem' }}>
-                        {/* NEWLY ADDED to desktop controls */}
                         <FullScreenButton performAction={performAction} isFullScreen={isFullScreen} />
                         <SidebarButton performAction={performAction} isSidebar={isSidebar} />
                     </div>

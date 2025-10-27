@@ -26,7 +26,7 @@ const MeetingFooter: React.FC<MeetingFooterProps> = (props) => {
   return (
     // This footer is now the positioning context for the progress bar
     <footer
-      className='flex-shrink-0'
+      className='flex-shrink-0 border-top'
       style={{ height: 90, position: 'relative' }}
     >
       <AnimatePresence>

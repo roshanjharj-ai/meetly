@@ -172,7 +172,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // NEW: Auto-pin on screen share (Request 5)
+  // NEW: Auto-pin on screen share
   useEffect(() => {
     if (sharingBy) {
       setPinnedUserId(sharingBy); // Auto-pin the sharer
@@ -329,6 +329,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
 
   return (
     <div
+      ref={meetingContainerRef} // Attach ref for fullscreen
       className="d-flex flex-column h-100 position-relative bg-body "
       data-bs-theme={theme}
     >
@@ -394,7 +395,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
         isJoined={isJoined}
         isRecording={isRecording}
         meetingProgress={meetingProgress}
-        isFullScreen={isFullScreen} // NEW: Pass fullscreen state to footer
+        isFullScreen={isFullScreen} // Pass fullscreen state
       />
 
       {isMobile && (
