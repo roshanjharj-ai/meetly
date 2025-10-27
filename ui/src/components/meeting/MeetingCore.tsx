@@ -1,3 +1,4 @@
+// src/pages/meeting/MeetingCore.tsx
 import { AnimatePresence, motion } from "framer-motion";
 import React, {
   useCallback,
@@ -31,7 +32,26 @@ interface MeetingCoreProps {
 
 const SidebarContent = React.memo(
   (props: any) => {
-    const { isMobile, activeSidebarTab, setActiveSidebarTab, setIsSidebarOpen, userList, botSpeaker, sharingBy, chatMessages, sendChatMessage, localUserId } = props;
+    const { 
+      isMobile, 
+      activeSidebarTab, 
+      setActiveSidebarTab, 
+      setIsSidebarOpen, 
+      userList, 
+      botSpeaker, 
+      sharingBy, 
+      chatMessages, 
+      sendChatMessage, 
+      localUserId, 
+      // NEW: Props for enhanced ChatPanel
+      roomId, 
+      fetchChatHistory,
+      users // Raw user IDs list (strings)
+    } = props;
+
+    // Filter the raw users list to exclude the local user for the recipient selector
+    const chatUsers = users.filter((u: string) => u !== localUserId);
+
     return (
       <div className="d-flex flex-column h-100 w-100">
         <div className="p-2 d-flex align-items-center justify-content-between border-bottom border-secondary flex-shrink-0">
@@ -75,6 +95,10 @@ const SidebarContent = React.memo(
               messages={chatMessages}
               sendMessage={sendChatMessage}
               localUserId={localUserId}
+              // NEW PROPS FOR PERSISTENCE AND PRIVATE CHAT
+              roomId={roomId}
+              fetchChatHistory={fetchChatHistory}
+              users={chatUsers} // Pass filtered list to ChatPanel
             />
           )}
         </div>
@@ -93,7 +117,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
 }) => {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 767.98px)");
-  const meetingContainerRef = useRef<HTMLDivElement>(null); // NEW: For fullscreen
+  const meetingContainerRef = useRef<HTMLDivElement>(null);
 
   const [isJoined, setIsJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(!initialAudioEnabled);
@@ -101,12 +125,12 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
   const [activeSidebarTab, setActiveSidebarTab] = useState<"participants" | "chat">("participants");
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
-  const [isFullScreen, setIsFullScreen] = useState(false); // NEW: Fullscreen state
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   const {
     connect,
     disconnect,
-    users,
+    users, // Raw user IDs list (string[])
     remoteStreams,
     remoteScreens,
     sharingBy,
@@ -117,6 +141,8 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     isScreenSharing,
     chatMessages,
     sendChatMessage,
+    // NEW: Destructure fetchChatHistory
+    fetchChatHistory, 
     botSpeaker,
     peerStatus,
     sharedContent,
@@ -160,9 +186,9 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     if (prefDevice.videoDeviceId) {
       selectVideoDevice(prefDevice.videoDeviceId);
     }
-  }, [prefDevice]);
+  }, [prefDevice, selectAudioDevice, selectVideoDevice]);
   
-    // NEW: Handle fullscreen changes
+    // Handle fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullScreen(!!document.fullscreenElement);
@@ -172,7 +198,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // NEW: Auto-pin on screen share
+  // Auto-pin on screen share
   useEffect(() => {
     if (sharingBy) {
       setPinnedUserId(sharingBy); // Auto-pin the sharer
@@ -243,7 +269,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
             ? await stopScreenShare()
             : await startScreenShare("system");
           break;
-	case "fullscreen":
+        case "fullscreen":
           if (!meetingContainerRef.current) return;
           if (document.fullscreenElement) {
             await document.exitFullscreen();
@@ -323,7 +349,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
 
   const onPinUser = useCallback((userId: string) => {
     setPinnedUserId((prev) => (prev === userId ? null : userId));
-  }, [sharingBy]);
+  }, []);
 
   const activeStream = sharingBy ? remoteScreens[sharingBy] : null;
 
@@ -353,6 +379,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
           />
         </div>
 
+        {/* Desktop Sidebar */}
         {!isMobile && (
           <AnimatePresence>
             {isSidebarOpen && (
@@ -375,6 +402,10 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
                   chatMessages={chatMessages}
                   sendChatMessage={sendChatMessage}
                   localUserId={userName}
+                  // NEW PROPS
+                  roomId={room}
+                  fetchChatHistory={fetchChatHistory}
+                  users={users}
                 />
               </motion.aside>
             )}
@@ -395,9 +426,10 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
         isJoined={isJoined}
         isRecording={isRecording}
         meetingProgress={meetingProgress}
-        isFullScreen={isFullScreen} // Pass fullscreen state
+        isFullScreen={isFullScreen}
       />
 
+      {/* Mobile Sidebar Overlay */}
       {isMobile && (
         <AnimatePresence>
           {isSidebarOpen && (
@@ -420,6 +452,10 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
                 chatMessages={chatMessages}
                 sendChatMessage={sendChatMessage}
                 localUserId={userName}
+                // NEW PROPS
+                roomId={room}
+                fetchChatHistory={fetchChatHistory}
+                users={users}
               />
             </motion.div>
           )}

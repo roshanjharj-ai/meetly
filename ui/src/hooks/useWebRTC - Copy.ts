@@ -1128,6 +1128,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       const history: ChatMessagePayload[] = await response.json();
       
       // Update local state with fetched history
+      // Note: This replaces the initial empty array with the history.
       setChatMessages(history); 
       
       return history;
@@ -1421,12 +1422,13 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const stopScreenShare = useCallback(() => { mgrRef.current?.stopScreenShare(); setIsScreenSharing(false); }, []);
   const sendContentUpdate = useCallback((content: string) => mgrRef.current?.sendContentUpdate(content), []);
   const broadcastStatus = useCallback((status: PeerStatus) => { mgrRef.current?.broadcastStatus(status); setPeerStatus((prev) => ({ ...prev, [userId]: status })); }, [userId]);
-  // UPDATED: sendChatMessage now expects ChatMessagePayload (with optional 'to')
+  
+  // FIX: REMOVE LOCAL SYNCHRONOUS ECHO
   const sendChatMessage = useCallback((msg: ChatMessagePayload) => { 
     mgrRef.current?.sendChatMessage(msg);
-    // Local echo is handled by the server sending the message back, 
-    // but the ChatPanel might rely on the synchronous update. 
-    // In this hook, the onChat handler now handles the merge/deduplication.
+    // REMOVED: setChatMessages((prev) => [...prev, msg]); 
+    // The server will echo the validated, persisted message back via mgr.onChat, 
+    // ensuring state consistency and preventing duplicates/rendering issues.
   }, []);
   
   const getLocalStream = useCallback(() => mgrRef.current?.localStream ?? null, []);
