@@ -4,16 +4,16 @@ import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, Linear
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import { FiAlertTriangle, FiArrowDownRight, FiArrowUpRight, FiCheckCircle, FiClock, FiEdit, FiGitBranch, FiHash, FiMessageSquare, FiPieChart, FiPlus, FiTool, FiTrash2, FiTrendingUp, FiUsers, FiX, FiZap } from 'react-icons/fi'; // Added FiUser, FiUsers, FiX
+import { FiAlertTriangle, FiArrowDownRight, FiArrowLeft, FiArrowUpRight, FiCheckCircle, FiClock, FiDollarSign, FiEdit, FiGitBranch, FiHash, FiMessageSquare, FiPieChart, FiPlus, FiTool, FiTrash2, FiTrendingUp, FiUsers, FiX, FiZap } from 'react-icons/fi';
 import { useNavigate, useParams } from 'react-router-dom';
-import { bargeIntoMeeting, type BotActivity, type BotConfig, type BotPerformance, deleteBotConfig, getBotActivities, getBotConfigs, getBotPerformance, updateBotConfig } from '../../services/api';
+import { bargeIntoMeeting, type BotActivity, type BotConfig, type BotPerformance, deleteBotConfig, getBotActivities, getBotConfigs, getBotPerformance, updateBotConfig, getLLMUsage, type LLMUsage } from '../../services/api';
 import AlertModal from '../shared/AlertModal';
 import BotConfigDrawer from './BotConfigDrawer';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, BarElement, ArcElement);
 
-// --- MOCK DATA FOR PARTICIPANTS ---
+// --- MOCK DATA FOR PARTICIPANTS (Existing) ---
 interface ParticipantDetail {
     id: string;
     name: string;
@@ -30,7 +30,7 @@ const mockBotParticipants: ParticipantDetail[] = [
     { id: 'p5', name: 'Charlie Brown', email: 'charlie@synapt.com', status: 'offline' },
 ];
 
-// --- NEW PARTICIPANTS DRAWER COMPONENT ---
+// --- NEW PARTICIPANTS DRAWER COMPONENT (Existing) ---
 interface BotParticipantsDrawerProps {
     isOpen: boolean;
     onClose: () => void;
@@ -96,7 +96,7 @@ const BotParticipantsDrawer: React.FC<BotParticipantsDrawerProps> = ({ isOpen, o
     </AnimatePresence>
 );
 
-// --- CHART COLOR PALETTE (Fixed Hex Codes for Universal Visibility) ---
+// --- CHART COLOR PALETTE (Existing) ---
 const CHART_VISIT_PALETTE = [
     '#5865F2', // Blue (Primary)
     '#16A34A', // Green (Success)
@@ -115,9 +115,15 @@ const CHART_STATUS_COLORS = {
 
 // --- CHART UTILITIES ---
 
+type GridOptions = {
+    color: string;
+    drawOnChartArea?: boolean; 
+};
+
 type ScaleOptions = {
-    display: boolean;
-    grid: { color: string; };
+    // FIX IS HERE: The type requires 'display', so we ensure it's present for all custom scale definitions.
+    display: boolean; 
+    grid: GridOptions; 
     ticks: { color: string; };
     beginAtZero?: boolean;
     title?: {
@@ -125,9 +131,10 @@ type ScaleOptions = {
         text: string;
         color: string;
     };
+    type?: 'linear' | 'category';
+    position?: 'left' | 'right';
 };
 
-// Utility to reliably get resolved CSS variables
 const getThemeColors = () => {
     if (typeof window === 'undefined') return { textColor: '#FFFFFF', gridColor: '#3F3F46', bgColor: '#27272A', borderColor: '#3F3F46' };
 
@@ -147,8 +154,7 @@ const getChartOptions = (title: string, type: 'line' | 'bar' | 'doughnut', color
     plugins: any;
     indexAxis?: 'x' | 'y';
     scales: {
-        x: ScaleOptions;
-        y: ScaleOptions;
+        [key: string]: ScaleOptions;
     };
 } => ({
     responsive: true,
@@ -283,6 +289,69 @@ const PerformanceChart = ({ performance }: { performance: BotPerformance }) => {
     };
 
     const options = getChartOptions('Average Duration Trend', 'line', themeColors);
+
+    return <Line data={data} options={options} />;
+};
+
+
+// NEW COMPONENT: LLM COST CHART
+const LLMCostChart = ({ usage }: { usage: LLMUsage }) => {
+    const themeColors = useMemo(() => getThemeColors(), []);
+
+    const data = {
+        labels: usage.cost_history.map(h => new Date(h.date).toLocaleDateString()),
+        datasets: [
+            {
+                label: 'Cost ($)',
+                data: usage.cost_history.map(h => h.cost),
+                borderColor: CHART_VISIT_PALETTE[2], // Orange/Warning
+                backgroundColor: 'rgba(242, 142, 43, 0.2)',
+                tension: 0.4,
+                fill: true,
+                pointRadius: 5,
+                yAxisID: 'y1',
+            },
+            {
+                label: 'Tokens Used (Millions)',
+                data: usage.cost_history.map(h => h.tokens_used / 1000000),
+                borderColor: CHART_VISIT_PALETTE[3], // Cyan/Teal (Info)
+                backgroundColor: 'rgba(118, 183, 178, 0.1)',
+                tension: 0.4,
+                fill: false,
+                pointRadius: 3,
+                yAxisID: 'y2',
+            },
+        ],
+    };
+
+    const options = getChartOptions('Weekly Cost & Token Usage', 'line', themeColors);
+    
+    // FIX APPLIED HERE: Ensure 'display: true' is included for all custom scales
+    options.scales = {
+        y1: {
+            display: true, // FIX: Added required 'display' property
+            type: 'linear',
+            position: 'left' as const,
+            title: { display: true, text: 'Cost ($)', color: CHART_VISIT_PALETTE[2] },
+            grid: { color: themeColors.gridColor },
+            ticks: { color: themeColors.textColor }
+        },
+        y2: {
+            display: true, // FIX: Added required 'display' property
+            type: 'linear',
+            position: 'right' as const,
+            title: { display: true, text: 'Tokens (M)', color: CHART_VISIT_PALETTE[3] },
+            grid: { drawOnChartArea: false, color: themeColors.gridColor }, 
+            ticks: { color: themeColors.textColor }
+        },
+        x: {
+            display: true, // Inherited from getChartOptions, but good to be explicit
+            grid: { color: themeColors.gridColor },
+            ticks: { color: themeColors.textColor }
+        }
+    };
+    options.plugins.legend.display = true;
+
 
     return <Line data={data} options={options} />;
 };
@@ -460,7 +529,8 @@ export default function BotDetail() {
     const [bot, setBot] = useState<BotConfig | null>(null);
     const [activities, setActivities] = useState<BotActivity[]>([]);
     const [performance, setPerformance] = useState<BotPerformance | null>(null);
-    // NEW STATE: For Participants Drawer
+    const [llmUsage, setLLMUsage] = useState<LLMUsage | null>(null);
+
     const [isParticipantsDrawerOpen, setIsParticipantsDrawerOpen] = useState(false);
 
     const [isLoading, setIsLoading] = useState(true);
@@ -474,15 +544,17 @@ export default function BotDetail() {
     const fetchData = async () => {
         setIsLoading(true);
         try {
-            // Fetch configuration, activities, and performance concurrently
-            const [config, activityData, performanceData] = await Promise.all([
+            // Fetch configuration, activities, performance, AND LLM usage concurrently
+            const [config, activityData, performanceData, llmUsageData] = await Promise.all([
                 getBotConfigs().then(configs => configs.find(c => c.id.toString() === botId) || null),
                 getBotActivities(botId!),
                 getBotPerformance(botId!),
+                getLLMUsage(botId!), // NEW API CALL
             ]);
             setBot(config);
             setActivities(activityData);
             setPerformance(performanceData);
+            setLLMUsage(llmUsageData); // Set LLM usage state
         } catch (error) {
             console.error("Failed to fetch bot details", error);
         } finally {
@@ -505,7 +577,7 @@ export default function BotDetail() {
                 ...bot!,
                 ...data as any,
                 recent_completion_rate: bot?.recent_completion_rate || 0,
-                tasks_completed_last_week: bot?.tasks_completed_last_week || 0,
+                tasks_completed_last_week: bot?.recent_completion_rate || 0,
             };
             await updateBotConfig(payload);
             setBot(payload);
@@ -553,22 +625,25 @@ export default function BotDetail() {
     return (
         <div className="p-4 p-md-5">
             {/* Header and Actions */}
-            <div className="d-flex justify-content-between align-items-center mb-5">
-                <h1 className="fw-light d-flex align-items-center gap-3">                    
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-5 gap-3">
+                <h1 className="fw-light d-flex align-items-center gap-3 mb-0">
+                    <button className="btn btn-outline-secondary d-flex align-items-center" onClick={() => navigate('/bots')}><FiArrowLeft /></button>
                     {bot.name}
                 </h1>
-                <div className="d-flex gap-2">
+                <div className="d-flex flex-wrap gap-2">
                     {/* NEW PARTICIPANTS BUTTON */}
-                    <button
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                         className="btn btn-info d-flex align-items-center gap-2"
                         onClick={() => setIsParticipantsDrawerOpen(true)}
                         title="View tracked meeting participants"
                     >
                         <FiUsers /> Participants ({mockBotParticipants.length})
-                    </button>
+                    </motion.button>
 
-                    <button className="btn btn-secondary d-flex align-items-center gap-2" onClick={() => setIsDrawerOpen(true)}><FiEdit /> Configure</button>
-                    <button className="btn btn-danger d-flex align-items-center gap-2" onClick={() => setIsDeleteModalOpen(true)}><FiTrash2 /> Delete</button>
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="btn btn-secondary d-flex align-items-center gap-2" onClick={() => setIsDrawerOpen(true)}><FiEdit /> Configure</motion.button>
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="btn btn-danger d-flex align-items-center gap-2" onClick={() => setIsDeleteModalOpen(true)}><FiTrash2 /> Delete</motion.button>
                 </div>
             </div>
 
@@ -619,6 +694,25 @@ export default function BotDetail() {
                     </div>
                 </div>
             </div>
+
+            {/* --- LLM Cost and Usage (NEW SECTION) --- */}
+            {llmUsage && (
+                <>
+                    <h3 className="mt-5 mb-4 d-flex align-items-center gap-2 text-info"><FiDollarSign /> LLM Cost and Usage: {llmUsage.model_name}</h3>
+                    <div className="row g-4 mb-5">
+                        <MetricPill icon={FiTrendingUp} title="YTD Total Cost" value={`$${llmUsage.total_cost_ytd.toFixed(2)}`} color="info" description="Year-to-date spending." />
+                        <MetricPill icon={FiClock} title="Avg. Cost / Meeting" value={`$${llmUsage.avg_cost_per_meeting.toFixed(2)}`} color="info" description="Cost efficiency metric." />
+                        <div className="col-lg-6">
+                            <div className="card shadow-sm h-100" style={{ background: 'var(--bs-secondary-bg)', border: '1px solid var(--bs-border-color)' }}>
+                                <div className="card-body" style={{ minHeight: '350px' }}>
+                                    <LLMCostChart usage={llmUsage} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+
 
             {/* --- Graph Execution Analysis --- */}
             {performance?.graphMetrics && (

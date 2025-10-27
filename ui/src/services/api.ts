@@ -81,6 +81,21 @@ export interface BotPerformance {
     };
 }
 
+// NEW INTERFACES
+export interface LLMCostEntry {
+    date: string;
+    cost: number;
+    tokens_used: number;
+}
+
+export interface LLMUsage {
+    model_name: string;
+    total_cost_ytd: number;
+    avg_cost_per_meeting: number;
+    cost_history: LLMCostEntry[];
+}
+
+
 const fallbackBots: BotConfig[] = [
     {
         id: 'b1',
@@ -139,22 +154,26 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
         tasksCommented: 120,
         completionRate: 0.95,
         metrics: [
-            { date: 'Oct 1', value: 30 }, { date: 'Oct 8', value: 45 },
-            { date: 'Oct 15', value: 32 }, { date: 'Oct 22', value: 40 },
+            { date: 'Jul', value: 48 },
+            { date: 'Aug', value: 42 },
+            { date: 'Sep', value: 38 },
+            { date: 'Oct', value: 35 },
+            { date: 'Nov', value: 33 },
         ],
         taskBreakdown: { completed: 88, commented: 120, created: 30, untouched: 5, total: 243 },
         graphMetrics: {
-            totalRuns: 450,
+            totalRuns: 500,
             stepVisits: [
-                { step: 'init', count: 450 },
-                { step: 'show_tasks', count: 450 },
-                { step: 'wait_command', count: 450 },
-                { step: 'ask_update', count: 320 },
-                { step: 'collecting', count: 320 },
-                { step: 'should_continue_router', count: 320 },
-                { step: 'summary', count: 130 },
+                { step: 'init', count: 500 }, 
+                { step: 'show_tasks', count: 500 },
+                { step: 'wait_command', count: 480 },
+                { step: 'ask_update', count: 350 },
+                { step: 'collecting', count: 350 },
+                { step: 'should_continue_router', count: 350 },
+                { step: 'summary', count: 120 },
+                { step: 'prompt_for_start', count: 20 },
             ],
-            stepStatus: { smooth: 380, clarification: 50, blocked: 20 },
+            stepStatus: { smooth: 420, clarification: 65, blocked: 15 },
         },
     },
     'b2': { 
@@ -164,8 +183,8 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
         tasksCommented: 12, 
         completionRate: 0.75, 
         metrics: [
-             { date: 'Oct 1', value: 50 }, { date: 'Oct 8', value: 40 },
-            { date: 'Oct 15', value: 55 }, { date: 'Oct 22', value: 60 },
+             { date: 'Aug', value: 55 }, { date: 'Sep', value: 50 },
+            { date: 'Oct', value: 48 }, { date: 'Nov', value: 45 },
         ],
         taskBreakdown: { completed: 5, commented: 12, created: 2, untouched: 10, total: 29 },
         graphMetrics: {
@@ -178,6 +197,7 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
                 { step: 'collecting', count: 50 },
                 { step: 'should_continue_router', count: 50 },
                 { step: 'summary', count: 30 },
+                { step: 'prompt_for_start', count: 0 },
             ],
             stepStatus: { smooth: 60, clarification: 15, blocked: 5 },
         },
@@ -198,9 +218,26 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
     },
 };
 
+// NEW MOCK DATA FOR LLM USAGE
+const fallbackLLMUsage: LLMUsage = {
+    model_name: "GPT-3.5-Turbo (Azure)",
+    total_cost_ytd: 145.75,
+    avg_cost_per_meeting: 0.85,
+    cost_history: [
+        { date: "2025-08-01", cost: 15.20, tokens_used: 1800000 },
+        { date: "2025-08-08", cost: 21.50, tokens_used: 2400000 },
+        { date: "2025-08-15", cost: 18.00, tokens_used: 2100000 },
+        { date: "2025-08-22", cost: 25.10, tokens_used: 3100000 },
+        { date: "2025-08-29", cost: 22.90, tokens_used: 2800000 },
+        { date: "2025-09-05", cost: 19.50, tokens_used: 2200000 },
+        { date: "2025-09-12", cost: 23.55, tokens_used: 2900000 },
+    ]
+};
+
+
 export const getBotConfigs = async (): Promise<BotConfig[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/bots/configs`);
+        const response = await axios.get(`${API_BASE_URL}/api/bots/configs`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getBotConfigs. Falling back to mock data.`, error);
@@ -210,7 +247,7 @@ export const getBotConfigs = async (): Promise<BotConfig[]> => {
 
 export const createBotConfig = async (data: Omit<BotConfig, 'id' | 'status' | 'currentMeetingId' | 'currentMeetingSubject' | 'recent_completion_rate' | 'tasks_completed_last_week'>): Promise<BotConfig> => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/bots/create`, data);
+        const response = await axios.post(`${API_BASE_URL}/api/bots/create`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for createBotConfig. Falling back to mock data.`, error);
@@ -230,7 +267,7 @@ export const createBotConfig = async (data: Omit<BotConfig, 'id' | 'status' | 'c
 
 export const updateBotConfig = async (data: BotConfig): Promise<BotConfig> => {
     try {
-        const response = await axios.put(`${API_BASE_URL}/bots/update/${data.id}`, data);
+        const response = await axios.put(`${API_BASE_URL}/api/bots/update/${data.id}`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for updateBotConfig. Falling back to mock data.`, error);
@@ -242,11 +279,10 @@ export const updateBotConfig = async (data: BotConfig): Promise<BotConfig> => {
 
 export const deleteBotConfig = async (id: string): Promise<{ success: boolean }> => {
     try {
-        await axios.delete(`${API_BASE_URL}/bots/delete/${id}`);
+        await axios.delete(`${API_BASE_URL}/api/bots/delete/${id}`);
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for deleteBotConfig. Falling back to mock data.`, error);
-        // Remove from mock data
         const index = fallbackBots.findIndex(b => b.id === id);
         if (index !== -1) fallbackBots.splice(index, 1);
         return { success: true };
@@ -255,7 +291,7 @@ export const deleteBotConfig = async (id: string): Promise<{ success: boolean }>
 
 export const getBotActivities = async (botId: string): Promise<BotActivity[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/bots/${botId}/activities`);
+        const response = await axios.get(`${API_BASE_URL}/api/bots/${botId}/activities`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getBotActivities for ${botId}. Falling back to mock data.`, error);
@@ -265,7 +301,7 @@ export const getBotActivities = async (botId: string): Promise<BotActivity[]> =>
 
 export const getBotPerformance = async (botId: string): Promise<BotPerformance> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/bots/${botId}/performance`);
+        const response = await axios.get(`${API_BASE_URL}/api/bots/${botId}/performance`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getBotPerformance for ${botId}. Falling back to mock data.`, error);
@@ -275,7 +311,7 @@ export const getBotPerformance = async (botId: string): Promise<BotPerformance> 
 
 export const bargeIntoMeeting = async (botId: string, meetingId: string): Promise<{ success: boolean }> => {
     try {
-        await axios.post(`${API_BASE_URL}/bots/${botId}/barge`, { meetingId });
+        await axios.post(`${API_BASE_URL}/api/bots/${botId}/barge`, { meetingId });
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for bargeIntoMeeting. Falling back to mock success.`, error);
@@ -283,6 +319,19 @@ export const bargeIntoMeeting = async (botId: string, meetingId: string): Promis
     }
 };
 
+// NEW API FUNCTION
+export const getLLMUsage = async (botId: string): Promise<LLMUsage> => {
+    try {
+        // NOTE: This endpoint is not fully implemented on the server yet, 
+        // so we intentionally throw an error to use the mock data.
+        throw new Error("LLM Usage API not implemented yet."); 
+        // const response = await axios.get(`${API_BASE_URL}/api/bots/${botId}/llm-usage`);
+        // return response.data;
+    } catch (error) {
+        console.warn(`API call failed for getLLMUsage for ${botId}. Falling back to mock data.`, error);
+        return JSON.parse(JSON.stringify(fallbackLLMUsage));
+    }
+};
 
 export interface UserProfileUpdate {
     full_name?: string;
@@ -292,7 +341,7 @@ export interface UserProfileUpdate {
 }
 
 export const updateUserProfile = async (data: UserProfileUpdate): Promise<any> => {
-    const response = await axios.put(`${API_BASE_URL}/users/me`, data);
+    const response = await axios.put(`${API_BASE_URL}/api/users/me`, data);
     return response.data;
 };
 
@@ -300,7 +349,7 @@ export const updateUserProfile = async (data: UserProfileUpdate): Promise<any> =
 
 export const getMeetings = async (): Promise<Meeting[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/getMeetings`);
+        const response = await axios.get(`${API_BASE_URL}/api/getMeetings`);
         return response.data.map((meeting: any) => ({
             ...meeting,
             participants: meeting.participants || [],
@@ -328,7 +377,7 @@ export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => 
     };
 
     try {
-        const response = await axios.post(`${API_BASE_URL}/createMeeting`, payload);
+        const response = await axios.post(`${API_BASE_URL}/api/createMeeting`, payload);
         return {
             ...response.data,
             participants: response.data.participants || [],
@@ -355,7 +404,7 @@ export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
         participant_ids: data.participants.map(p => parseInt(p.id, 10))
     };
     try {
-        const response = await axios.put(`${API_BASE_URL}/updateMeeting/${data.id}`, payload); 
+        const response = await axios.put(`${API_BASE_URL}/api/updateMeeting/${data.id}`, payload); 
         return {
             ...response.data,
             participants: response.data.participants || [],
@@ -372,7 +421,7 @@ export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
 
 export const deleteMeeting = async (id: string): Promise<{ success: boolean }> => {
     try {
-        await axios.delete(`${API_BASE_URL}/deleteMeeting/${id}`);
+        await axios.delete(`${API_BASE_URL}/api/deleteMeeting/${id}`);
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for deleteMeeting. Falling back to mock data.`, error);
@@ -385,7 +434,7 @@ export const deleteMeeting = async (id: string): Promise<{ success: boolean }> =
 
 export const getParticipants = async (): Promise<Participant[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/getParticipants`);
+        const response = await axios.get(`${API_BASE_URL}/api/getParticipants`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getParticipants. Falling back to mock data.`, error);
@@ -395,7 +444,7 @@ export const getParticipants = async (): Promise<Participant[]> => {
 
 export const createParticipant = async (data: CreateParticipantRequest): Promise<Participant> => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/createParticipant`, data);
+        const response = await axios.post(`${API_BASE_URL}/api/createParticipant`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for createParticipant. Falling back to mock data.`, error);
@@ -407,7 +456,7 @@ export const createParticipant = async (data: CreateParticipantRequest): Promise
 
 export const updateParticipant = async (data: UpdateParticipantRequest): Promise<Participant> => {
     try {
-        const response = await axios.put(`${API_BASE_URL}/updateParticipant/${data.id}`, data);
+        const response = await axios.put(`${API_BASE_URL}/api/updateParticipant/${data.id}`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for updateParticipant. Falling back to mock data.`, error);
@@ -420,7 +469,7 @@ export const updateParticipant = async (data: UpdateParticipantRequest): Promise
 
 export const deleteParticipant = async (id: string): Promise<{ success: boolean }> => {
     try {
-        await axios.delete(`${API_BASE_URL}/deleteParticipant/${id}`);
+        await axios.delete(`${API_BASE_URL}/api/deleteParticipant/${id}`);
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for deleteParticipant. Falling back to mock data.`, error);
@@ -444,11 +493,11 @@ interface VerifyCodePayload {
 }
 
 export const validateJoinRequest = async (payload: ValidateJoinPayload): Promise<{ message: string }> => {
-    const response = await axios.post(`${API_BASE_URL}/meetings/validate-join`, payload);
+    const response = await axios.post(`${API_BASE_URL}/api/meetings/validate-join`, payload);
     return response.data;
 };
 
 export const verifyJoinCode = async (payload: VerifyCodePayload): Promise<{ valid: boolean; message: string; token?: string }> => {
-    const response = await axios.post(`${API_BASE_URL}/meetings/verify-code`, payload);
+    const response = await axios.post(`${API_BASE_URL}/api/meetings/verify-code`, payload);
     return response.data;
 };
