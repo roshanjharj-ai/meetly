@@ -4,9 +4,9 @@ import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, Linear
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import { FiAlertTriangle, FiArrowDownRight, FiArrowLeft, FiArrowUpRight, FiCheckCircle, FiClock, FiDollarSign, FiEdit, FiGitBranch, FiHash, FiMessageSquare, FiPieChart, FiPlus, FiTool, FiTrash2, FiTrendingUp, FiUsers, FiX, FiZap } from 'react-icons/fi';
+import { FiAlertTriangle, FiArrowDownRight, FiArrowUpRight, FiCheckCircle, FiClock, FiDollarSign, FiEdit, FiGitBranch, FiHash, FiMessageSquare, FiPieChart, FiPlus, FiTool, FiTrash2, FiTrendingUp, FiUsers, FiX, FiZap } from 'react-icons/fi';
 import { useNavigate, useParams } from 'react-router-dom';
-import { bargeIntoMeeting, type BotActivity, type BotConfig, type BotPerformance, deleteBotConfig, getBotActivities, getBotConfigs, getBotPerformance, updateBotConfig, getLLMUsage, type LLMUsage } from '../../services/api';
+import { bargeIntoMeeting, type BotActivity, type BotConfig, type BotPerformance, deleteBotConfig, getBotActivities, getBotConfigs, getBotPerformance, getLLMUsage, type LLMUsage, updateBotConfig } from '../../services/api';
 import AlertModal from '../shared/AlertModal';
 import BotConfigDrawer from './BotConfigDrawer';
 
