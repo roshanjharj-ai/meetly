@@ -237,7 +237,7 @@ const fallbackLLMUsage: LLMUsage = {
 
 export const getBotConfigs = async (): Promise<BotConfig[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/bots/configs`);
+        const response = await axios.get(`${API_BASE_URL}/api/bots/configs`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getBotConfigs. Falling back to mock data.`, error);
@@ -247,7 +247,7 @@ export const getBotConfigs = async (): Promise<BotConfig[]> => {
 
 export const createBotConfig = async (data: Omit<BotConfig, 'id' | 'status' | 'currentMeetingId' | 'currentMeetingSubject' | 'recent_completion_rate' | 'tasks_completed_last_week'>): Promise<BotConfig> => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/bots/create`, data);
+        const response = await axios.post(`${API_BASE_URL}/api/bots/create`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for createBotConfig. Falling back to mock data.`, error);
@@ -267,7 +267,7 @@ export const createBotConfig = async (data: Omit<BotConfig, 'id' | 'status' | 'c
 
 export const updateBotConfig = async (data: BotConfig): Promise<BotConfig> => {
     try {
-        const response = await axios.put(`${API_BASE_URL}/bots/update/${data.id}`, data);
+        const response = await axios.put(`${API_BASE_URL}/api/bots/update/${data.id}`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for updateBotConfig. Falling back to mock data.`, error);
@@ -279,7 +279,7 @@ export const updateBotConfig = async (data: BotConfig): Promise<BotConfig> => {
 
 export const deleteBotConfig = async (id: string): Promise<{ success: boolean }> => {
     try {
-        await axios.delete(`${API_BASE_URL}/bots/delete/${id}`);
+        await axios.delete(`${API_BASE_URL}/api/bots/delete/${id}`);
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for deleteBotConfig. Falling back to mock data.`, error);
@@ -291,7 +291,7 @@ export const deleteBotConfig = async (id: string): Promise<{ success: boolean }>
 
 export const getBotActivities = async (botId: string): Promise<BotActivity[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/bots/${botId}/activities`);
+        const response = await axios.get(`${API_BASE_URL}/api/bots/${botId}/activities`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getBotActivities for ${botId}. Falling back to mock data.`, error);
@@ -301,7 +301,7 @@ export const getBotActivities = async (botId: string): Promise<BotActivity[]> =>
 
 export const getBotPerformance = async (botId: string): Promise<BotPerformance> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/bots/${botId}/performance`);
+        const response = await axios.get(`${API_BASE_URL}/api/bots/${botId}/performance`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getBotPerformance for ${botId}. Falling back to mock data.`, error);
@@ -311,7 +311,7 @@ export const getBotPerformance = async (botId: string): Promise<BotPerformance> 
 
 export const bargeIntoMeeting = async (botId: string, meetingId: string): Promise<{ success: boolean }> => {
     try {
-        await axios.post(`${API_BASE_URL}/bots/${botId}/barge`, { meetingId });
+        await axios.post(`${API_BASE_URL}/api/bots/${botId}/barge`, { meetingId });
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for bargeIntoMeeting. Falling back to mock success.`, error);
@@ -325,7 +325,7 @@ export const getLLMUsage = async (botId: string): Promise<LLMUsage> => {
         // NOTE: This endpoint is not fully implemented on the server yet, 
         // so we intentionally throw an error to use the mock data.
         throw new Error("LLM Usage API not implemented yet."); 
-        // const response = await axios.get(`${API_BASE_URL}/bots/${botId}/llm-usage`);
+        // const response = await axios.get(`${API_BASE_URL}/api/bots/${botId}/llm-usage`);
         // return response.data;
     } catch (error) {
         console.warn(`API call failed for getLLMUsage for ${botId}. Falling back to mock data.`, error);
@@ -341,7 +341,7 @@ export interface UserProfileUpdate {
 }
 
 export const updateUserProfile = async (data: UserProfileUpdate): Promise<any> => {
-    const response = await axios.put(`${API_BASE_URL}/users/me`, data);
+    const response = await axios.put(`${API_BASE_URL}/api/users/me`, data);
     return response.data;
 };
 
@@ -349,7 +349,7 @@ export const updateUserProfile = async (data: UserProfileUpdate): Promise<any> =
 
 export const getMeetings = async (): Promise<Meeting[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/getMeetings`);
+        const response = await axios.get(`${API_BASE_URL}/api/getMeetings`);
         return response.data.map((meeting: any) => ({
             ...meeting,
             participants: meeting.participants || [],
@@ -377,7 +377,7 @@ export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => 
     };
 
     try {
-        const response = await axios.post(`${API_BASE_URL}/createMeeting`, payload);
+        const response = await axios.post(`${API_BASE_URL}/api/createMeeting`, payload);
         return {
             ...response.data,
             participants: response.data.participants || [],
@@ -404,7 +404,7 @@ export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
         participant_ids: data.participants.map(p => parseInt(p.id, 10))
     };
     try {
-        const response = await axios.put(`${API_BASE_URL}/updateMeeting/${data.id}`, payload); 
+        const response = await axios.put(`${API_BASE_URL}/api/updateMeeting/${data.id}`, payload); 
         return {
             ...response.data,
             participants: response.data.participants || [],
@@ -421,7 +421,7 @@ export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
 
 export const deleteMeeting = async (id: string): Promise<{ success: boolean }> => {
     try {
-        await axios.delete(`${API_BASE_URL}/deleteMeeting/${id}`);
+        await axios.delete(`${API_BASE_URL}/api/deleteMeeting/${id}`);
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for deleteMeeting. Falling back to mock data.`, error);
@@ -434,7 +434,7 @@ export const deleteMeeting = async (id: string): Promise<{ success: boolean }> =
 
 export const getParticipants = async (): Promise<Participant[]> => {
     try {
-        const response = await axios.get(`${API_BASE_URL}/getParticipants`);
+        const response = await axios.get(`${API_BASE_URL}/api/getParticipants`);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getParticipants. Falling back to mock data.`, error);
@@ -444,7 +444,7 @@ export const getParticipants = async (): Promise<Participant[]> => {
 
 export const createParticipant = async (data: CreateParticipantRequest): Promise<Participant> => {
     try {
-        const response = await axios.post(`${API_BASE_URL}/createParticipant`, data);
+        const response = await axios.post(`${API_BASE_URL}/api/createParticipant`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for createParticipant. Falling back to mock data.`, error);
@@ -456,7 +456,7 @@ export const createParticipant = async (data: CreateParticipantRequest): Promise
 
 export const updateParticipant = async (data: UpdateParticipantRequest): Promise<Participant> => {
     try {
-        const response = await axios.put(`${API_BASE_URL}/updateParticipant/${data.id}`, data);
+        const response = await axios.put(`${API_BASE_URL}/api/updateParticipant/${data.id}`, data);
         return response.data;
     } catch (error) {
         console.warn(`API call failed for updateParticipant. Falling back to mock data.`, error);
@@ -469,7 +469,7 @@ export const updateParticipant = async (data: UpdateParticipantRequest): Promise
 
 export const deleteParticipant = async (id: string): Promise<{ success: boolean }> => {
     try {
-        await axios.delete(`${API_BASE_URL}/deleteParticipant/${id}`);
+        await axios.delete(`${API_BASE_URL}/api/deleteParticipant/${id}`);
         return { success: true };
     } catch (error) {
         console.warn(`API call failed for deleteParticipant. Falling back to mock data.`, error);
@@ -493,11 +493,11 @@ interface VerifyCodePayload {
 }
 
 export const validateJoinRequest = async (payload: ValidateJoinPayload): Promise<{ message: string }> => {
-    const response = await axios.post(`${API_BASE_URL}/meetings/validate-join`, payload);
+    const response = await axios.post(`${API_BASE_URL}/api/meetings/validate-join`, payload);
     return response.data;
 };
 
 export const verifyJoinCode = async (payload: VerifyCodePayload): Promise<{ valid: boolean; message: string; token?: string }> => {
-    const response = await axios.post(`${API_BASE_URL}/meetings/verify-code`, payload);
+    const response = await axios.post(`${API_BASE_URL}/api/meetings/verify-code`, payload);
     return response.data;
 };

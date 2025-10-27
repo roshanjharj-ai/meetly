@@ -626,8 +626,7 @@ export default function BotDetail() {
         <div className="p-4 p-md-5">
             {/* Header and Actions */}
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-start mb-5 gap-3">
-                <h1 className="fw-light d-flex align-items-center gap-3 mb-0">
-                    <button className="btn btn-outline-secondary d-flex align-items-center" onClick={() => navigate('/bots')}><FiArrowLeft /></button>
+                <h1 className="fw-light d-flex align-items-center gap-3 mb-0">                    
                     {bot.name}
                 </h1>
                 <div className="d-flex flex-wrap gap-2">
