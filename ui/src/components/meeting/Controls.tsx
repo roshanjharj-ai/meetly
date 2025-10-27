@@ -1,7 +1,18 @@
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useState } from "react";
 import { CgSpinner } from "react-icons/cg";
-import { FiDisc, FiMic, FiMicOff, FiMoreVertical, FiPhoneOff, FiShare, FiVideo, FiVideoOff } from "react-icons/fi";
+import { 
+    FiDisc, 
+    FiMic, 
+    FiMicOff, 
+    FiMoreVertical, 
+    FiPhoneOff, 
+    FiShare, 
+    FiVideo, 
+    FiVideoOff,
+    FiMaximize, // NEW
+    FiMinimize  // NEW
+} from "react-icons/fi";
 import { LuPanelRight, LuPanelRightClose } from "react-icons/lu";
 import type { MeetingProgress } from "../../hooks/useWebRTC";
 import { ControlActionTypes } from "../../types/meeting.types";
@@ -19,6 +30,7 @@ interface ControlsProps {
     isSidebar: boolean;
     isRecording: boolean;
     isRecordingLoading: boolean;
+    isFullScreen: boolean; // NEW PROP
     timerComponent?: React.ReactNode;
     meetingProgress: MeetingProgress | null;
 }
@@ -50,6 +62,17 @@ const SidebarButton = React.memo(({ performAction, isSidebar }: { performAction:
     <motion.button onClick={() => performAction(ControlActionTypes.sidebar)} aria-label={isSidebar ? "Hide sidebar" : "Show sidebar"} className="control-button">{isSidebar ? <LuPanelRightClose size={22} /> : <LuPanelRight size={22} />}</motion.button>
 ));
 
+// NEW FullScreenButton
+const FullScreenButton = React.memo(({ performAction, isFullScreen }: { performAction: (a: string) => void; isFullScreen: boolean }) => (
+    <motion.button 
+        onClick={() => performAction("fullscreen")} 
+        aria-label={isFullScreen ? "Exit fullscreen" : "Enter fullscreen"} 
+        className="control-button"
+    >
+        {isFullScreen ? <FiMinimize size={20} /> : <FiMaximize size={20} />}
+    </motion.button>
+));
+
 const ShareButton = React.memo(({ isSharing, handleShare }: any) => {
     return (
         <div className="position-relative d-flex align-items-center">
@@ -66,7 +89,7 @@ const ShareButton = React.memo(({ isSharing, handleShare }: any) => {
 
 
 const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing,
-    isSpeaking, isSidebar, isRecording, isRecordingLoading, meetingProgress }: ControlsProps) => {
+    isSpeaking, isSidebar, isRecording, isRecordingLoading, isFullScreen, meetingProgress }: ControlsProps) => { // Added isFullScreen
     const [isMoreMenuOpen, setMoreMenuOpen] = useState(false);
 
     const handleShare = (mode: "none" | "mic" | "system") => {
@@ -77,6 +100,7 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
     return (
         <>
             <style type="text/css">{`
+                /* ... (All existing styles remain unchanged) ... */
                 .controls-container {
                     width: 100%;
                     height: 100%;
@@ -176,6 +200,8 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
                                             <CameraButton performAction={performAction} isCameraOff={isCameraOff} />
                                             <RecordButton isRecordingLoading={isRecordingLoading} performAction={performAction} isRecording={isRecording} />
                                             <ShareButton isSharing={isSharing} handleShare={handleShare} />
+                                            {/* NEWLY ADDED to mobile menu */}
+                                            <FullScreenButton performAction={performAction} isFullScreen={isFullScreen} />
                                             <SidebarButton performAction={performAction} isSidebar={isSidebar} />
                                         </motion.div>
                                     )}
@@ -185,7 +211,10 @@ const Controls = ({ performAction, status, room, isMuted, isCameraOff, isSharing
                         <EndCallButton performAction={performAction} />
                     </div>
 
-                    <div className="d-none d-md-flex justify-content-end" style={{ minWidth: '200px' }}>
+                    {/* MODIFIED: Added align-items-center and gap */}
+                    <div className="d-none d-md-flex justify-content-end align-items-center" style={{ minWidth: '200px', gap: '1rem' }}>
+                        {/* NEWLY ADDED to desktop controls */}
+                        <FullScreenButton performAction={performAction} isFullScreen={isFullScreen} />
                         <SidebarButton performAction={performAction} isSidebar={isSidebar} />
                     </div>
                 </div>

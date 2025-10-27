@@ -19,6 +19,7 @@ interface MeetingFooterProps {
   isJoined: boolean;
   isRecording: boolean;
   meetingProgress: MeetingProgress | null;
+  isFullScreen: boolean;
 }
 
 const MeetingFooter: React.FC<MeetingFooterProps> = (props) => {

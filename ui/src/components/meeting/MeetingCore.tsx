@@ -93,6 +93,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
 }) => {
   const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 767.98px)");
+  const meetingContainerRef = useRef<HTMLDivElement>(null); // NEW: For fullscreen
 
   const [isJoined, setIsJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(!initialAudioEnabled);
@@ -100,6 +101,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
   const [activeSidebarTab, setActiveSidebarTab] = useState<"participants" | "chat">("participants");
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false); // NEW: Fullscreen state
 
   const {
     connect,
@@ -159,6 +161,26 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
       selectVideoDevice(prefDevice.videoDeviceId);
     }
   }, [prefDevice]);
+  
+    // NEW: Handle fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullScreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // NEW: Auto-pin on screen share (Request 5)
+  useEffect(() => {
+    if (sharingBy) {
+      setPinnedUserId(sharingBy); // Auto-pin the sharer
+    } else {
+      // When sharing stops, unpin *if* the pinned user was the sharer
+      setPinnedUserId((prev) => (prev === sharingBy ? null : prev));
+    }
+  }, [sharingBy]);
 
   const disconnectingRef = useRef(false);
   const performAction = useCallback(
@@ -220,6 +242,16 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
           currentIsScreenSharing
             ? await stopScreenShare()
             : await startScreenShare("system");
+          break;
+	case "fullscreen":
+          if (!meetingContainerRef.current) return;
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+            setIsFullScreen(false);
+          } else {
+            await meetingContainerRef.current.requestFullscreen();
+            setIsFullScreen(true);
+          }
           break;
         case ControlActionTypes.shareStop:
           await stopScreenShare();
@@ -291,7 +323,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
 
   const onPinUser = useCallback((userId: string) => {
     setPinnedUserId((prev) => (prev === userId ? null : userId));
-  }, []);
+  }, [sharingBy]);
 
   const activeStream = sharingBy ? remoteScreens[sharingBy] : null;
 
@@ -362,6 +394,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
         isJoined={isJoined}
         isRecording={isRecording}
         meetingProgress={meetingProgress}
+        isFullScreen={isFullScreen} // NEW: Pass fullscreen state to footer
       />
 
       {isMobile && (

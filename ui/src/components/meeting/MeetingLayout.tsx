@@ -8,7 +8,12 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { BsPinAngle, BsPinAngleFill, BsRobot } from "react-icons/bs";
+import {
+  BsPinAngle,
+  BsPinAngleFill,
+  BsRobot,
+  BsSoundwave, // <-- NEW: Import soundwave icon
+} from "react-icons/bs";
 import {
   FaMicrophoneSlash,
   FaVideoSlash,
@@ -41,7 +46,7 @@ type User = {
 };
 
 type MeetingLayoutProps = {
-  users: User[]; 
+  users: User[];
   botNames: string[];
   botSpeaker: string;
   sharingBy: string | null; // <-- We will use this in the side pane logic
@@ -94,8 +99,8 @@ const ParticipantCard = React.memo(
     const color = useMemo(
       () =>
         COLORS[
-          user.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) %
-            COLORS.length
+        user.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) %
+        COLORS.length
         ],
       [user.id]
     );
@@ -134,7 +139,7 @@ const ParticipantCard = React.memo(
             <span className="participant-name">
               {user.isLocal ? `${user.id} (You)` : user.id}
             </span>
-            
+
             <div className="participant-status-icons">
               <AnimatePresence>
                 {user.isMuted && (
@@ -142,7 +147,7 @@ const ParticipantCard = React.memo(
                     initial={{ opacity: 0, scale: 0.5 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.5 }}
-                    className="status-icon-wrapper" 
+                    className="status-icon-wrapper"
                   >
                     <FaMicrophoneSlash className="icon-danger" />
                   </motion.div>
@@ -155,7 +160,7 @@ const ParticipantCard = React.memo(
                     initial={{ opacity: 0, scale: 0.5 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.5 }}
-                    className="status-icon-wrapper" 
+                    className="status-icon-wrapper"
                   >
                     <FaVideoSlash className="icon-warning" />
                   </motion.div>
@@ -207,7 +212,7 @@ export const DynamicGrid = ({
 
       let maxTileW = 0;
       let bestCols = 1;
-      let computedTileWidth = 0; 
+      let computedTileWidth = 0;
 
       for (let c = 1; c <= n; c++) {
         const r = Math.ceil(n / c);
@@ -224,7 +229,7 @@ export const DynamicGrid = ({
 
       if (maxTileW === 0) {
         let maxTileH = 0;
-        bestCols = n; 
+        bestCols = n;
         for (let r = 1; r <= n; r++) {
           const c = Math.ceil(n / r);
           const tileH = h / r;
@@ -233,14 +238,14 @@ export const DynamicGrid = ({
             if (tileH > maxTileH) {
               maxTileH = tileH;
               bestCols = c;
-              computedTileWidth = tileW; 
+              computedTileWidth = tileW;
             }
           }
         }
       }
 
       let columnTemplate = `repeat(${bestCols}, 1fr)`;
-      
+
       if (computedTileWidth > 0) {
         columnTemplate = `repeat(${bestCols}, minmax(0, ${computedTileWidth}px))`;
       }
@@ -272,8 +277,6 @@ export const DynamicGrid = ({
   );
 };
 
-// --- Sub-component: FloatingBot ---
-
 const FloatingBot = ({
   user,
   isSpeaking,
@@ -283,40 +286,92 @@ const FloatingBot = ({
 }) => {
   const dragControls = useDragControls();
 
+  // *** 3. ADD a ref to the bot element itself ***
+  const botRef = useRef<HTMLDivElement>(null);
+
+  // *** 4. ADD state to hold the dynamic constraints ***
+  const [dragConstraints, setDragConstraints] = useState({
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  });
+
+  // *** 5. ADD effect to calculate viewport constraints ***
+  useLayoutEffect(() => {
+    const botEl = botRef.current;
+    if (!botEl) return;
+
+    // Function to update constraints
+    const updateConstraints = () => {
+      const { innerWidth, innerHeight } = window;
+      const { width, height } = botEl.getBoundingClientRect();
+
+      setDragConstraints({
+        top: 0,
+        left: 0,
+        right: innerWidth - width,   // Constrain right edge
+        bottom: innerHeight - height, // Constrain bottom edge
+      });
+    };
+
+    // Calculate constraints on mount
+    updateConstraints();
+
+    // Recalculate on window resize
+    window.addEventListener("resize", updateConstraints);
+    return () => window.removeEventListener("resize", updateConstraints);
+  }, []); // Empty dependency array ensures this runs once on mount
+
   return (
     <motion.div
+      ref={botRef} // *** 6. ATTACH the ref ***
       className="floating-bot"
       drag
       dragControls={dragControls}
       dragListener={false}
       whileDrag={{ scale: 1.1, boxShadow: "0px 10px 30px rgba(0,0,0,0.3)" }}
       data-speaking={isSpeaking}
+      dragConstraints={dragConstraints} // *** 7. APPLY the dynamic constraints ***
+      dragElastic={0} // *** 8. SET elastic to 0 to prevent bouncing past the edge ***
     >
       <motion.div
         className="floating-bot-icon"
         onPointerDown={(e) => dragControls.start(e)}
         style={{ cursor: "grab" }}
-        animate={isSpeaking ? { scale: [1, 1.2, 1, 1.2, 1] } : { scale: 1 }}
+        animate={isSpeaking ? { scale: [1, 1.1, 1] } : { scale: 1 }}
         transition={
-          isSpeaking ? { repeat: Infinity, duration: 1.2, ease: "easeInOut" } : {}
+          isSpeaking
+            ? { repeat: Infinity, duration: 1, ease: "easeInOut" }
+            : {}
         }
       >
         <BsRobot />
       </motion.div>
+
       <div className="floating-bot-name">{user.id}</div>
+
+      {/* Speaking Animation (from previous step) */}
       <AnimatePresence>
         {isSpeaking && (
           <motion.div
-            className="floating-bot-speaking-pulse"
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: [0, 0.6, 0], scale: [0.8, 2, 2] }}
-            exit={{ opacity: 0 }}
-            transition={{
-              repeat: Infinity,
-              duration: 1.5,
-              ease: "easeInOut",
-            }}
-          />
+            className="floating-bot-speaking-indicator"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: "auto", opacity: 1, marginLeft: "0.5rem" }}
+            exit={{ width: 0, opacity: 0, marginLeft: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            <motion.div
+              animate={{ scaleY: [1, 1.4, 0.8, 1.2, 1] }}
+              transition={{
+                repeat: Infinity,
+                duration: 0.7,
+                ease: "easeInOut",
+              }}
+            >
+              <BsSoundwave className="text-success" size={20} />
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
@@ -337,13 +392,14 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
   isMobile,
   isChatSidebarOpen,
 }: MeetingLayoutProps) => {
-  
+  const constraintsRef = useRef<HTMLDivElement>(null);
+
   // --- Filter Users ---
   const humanUsers = useMemo(
     () => (users || []).filter((u) => !botNames.includes(u.id)),
     [users, botNames]
   );
-  
+
   const botUsers = useMemo(
     () => (users || []).filter((u) => botNames.includes(u.id)),
     [users, botNames]
@@ -383,7 +439,7 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
       return humanUsers.filter(u => u.id !== sharingBy);
     }
     // Fallback for "content" or other types
-    return humanUsers; 
+    return humanUsers;
   }, [humanUsers, mainViewType, pinnedUserId, sharingBy]); // <-- Added sharingBy
 
 
@@ -397,7 +453,11 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
 
 
   return (
-    <div className="meeting-layout-container" data-bs-theme={theme}>
+    <div
+      // ref={constraintsRef} // <-- REMOVE THIS LINE
+      className="meeting-layout-container"
+      data-bs-theme={theme}
+    >
       {/* --- Floating Bots --- */}
       <AnimatePresence>
         {botUsers.map((bot) => (
@@ -405,6 +465,7 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
             key={bot.id}
             user={bot}
             isSpeaking={botSpeaker === bot.id}
+          // constraintsRef={constraintsRef} // <-- REMOVE THIS LINE
           />
         ))}
       </AnimatePresence>
@@ -455,7 +516,7 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
 
       {/* --- Side Pane --- */}
       <AnimatePresence>
-        {!isMobile && !isChatSidebarOpen && mainViewType !== "grid" && sidePaneUsers.length > 0 && (
+        {!isMobile && !isChatSidebarOpen && mainViewType === "pin" && sidePaneUsers.length > 0 && (
           <motion.div
             className="meeting-side-pane"
             initial={{ width: 0, opacity: 0 }}

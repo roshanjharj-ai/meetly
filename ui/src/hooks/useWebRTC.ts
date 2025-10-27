@@ -76,8 +76,9 @@ class WebRTCManager {
   pendingScreen: string | null = null;
   lastUserList: string[] = [];
 
-  // --- FIX A: Add guard flag for idempotent disconnect ---
+  // --- cleanup/connection guards ---
   private isDisconnected = false;
+  private cleanupRunning = false;
 
   onProgressUpdate?: (p: MeetingProgress) => void;
   onUsers?: (u: string[]) => void;
@@ -174,9 +175,9 @@ class WebRTCManager {
       return;
     }
 
-    // If manager already disconnected permanently (guard), do not reconnect.
+    // If manager already permanently disconnected (guard), do not reconnect.
     if (this.isDisconnected) {
-      this.log("⚠️ connect() called but manager is flagged disconnected.");
+      this.log("⚠️ connect() called but manager is flagged permanently disconnected.");
       return;
     }
 
@@ -215,12 +216,15 @@ class WebRTCManager {
   disconnect(permanent = false) {
     this.log("🔴 Disconnect called for user:", this.userId);
 
-    // Idempotent guard: ensure we only run the heavy cleanup once.
-    if (this.isDisconnected) {
-      this.log("⚠️ Disconnect called, but already disconnected.");
+    // Idempotent guard: prevent overlapping cleanup runs
+    if (this.cleanupRunning) {
+      this.log("⚠️ Disconnect cleanup already running - ignoring duplicate call.");
       return;
     }
-    this.isDisconnected = permanent ? true : true;
+    this.cleanupRunning = true;
+
+    // Mark permanently disconnected only when requested as permanent
+    if (permanent) this.isDisconnected = true;
 
     try {
       // --- CRITICAL: detach video elements first to allow browser to release devices ---
@@ -239,7 +243,7 @@ class WebRTCManager {
       try {
         Object.entries(this.peers).forEach(([peerId, pc]) => {
           try {
-            console.log("Removing tracks from peer connection senders for", peerId);
+            this.log("Removing tracks from peer connection senders for", peerId);
             pc.getSenders().forEach((s: RTCRtpSender) => {
               try {
                 if (s && typeof s.replaceTrack === "function") {
@@ -297,6 +301,8 @@ class WebRTCManager {
       this.log("✅ All devices and connections released.");
     } catch (err) {
       this.log("disconnect() error:", err);
+    } finally {
+      this.cleanupRunning = false;
     }
   }
 
@@ -323,7 +329,10 @@ class WebRTCManager {
             }
             const isBot = DEFAULT_BOT_NAMES.includes(peerId);
             const initiator = isBot || this.userId < peerId;
-            this.createPeer(peerId, initiator);
+            // Prevent duplicate creation if createPeer was triggered recently
+            if (!this.creatingPeer[peerId]) {
+              this.createPeer(peerId, initiator).catch(err => this.log("createPeer error (user_list):", err));
+            }
           }
         }
         break;
@@ -372,16 +381,24 @@ class WebRTCManager {
       }
       return Math.abs(h);
     }
-    const polite = stableHash(this.userId) > stableHash(from);
+    // FIX: tie-break deterministic polite calculation using userId when hash ties
+    const hThis = stableHash(this.userId);
+    const hFrom = stableHash(from);
+    let polite = false;
+    if (hThis !== hFrom) polite = hThis > hFrom;
+    else polite = this.userId > from; // tie-break by string comparison
     pc._polite = polite;
-    this.log(`Politeness check: ${this.userId} vs ${from} → ${polite ? "polite" : "impolite"}`);
+    this.log(`Politeness check: ${this.userId} vs ${from} → ${polite ? "polite" : "impolite"} (hash ${hThis} vs ${hFrom})`);
 
     // --- offer-collision logic ---
     const isOfferCollision = action === "offer" &&
       (pc.signalingState !== "stable" || pc._makingOffer);
 
     if (isOfferCollision && !polite) {
-      this.log("⚠️ Offer collision → ignoring offer from", from, "because not polite");
+      // Impolite: mark ignoreOffer so we don't attempt to process conflicting offer/ICE
+      pc._ignoreOffer = true;
+      pc._queuedCandidates = []; // drop queued candidates because this offer is ignored
+      this.log("⚠️ Offer collision → ignoring offer from", from, "because not polite. Queued ICE dropped.");
       return;
     }
 
@@ -432,6 +449,13 @@ class WebRTCManager {
         }
 
       } else if (action === "ice" && payload) {
+        // If we are currently ignoring offers from this peer (we were 'impolite' on a collision), drop ICE
+        if (pc._ignoreOffer) {
+          this.log("Dropping incoming ICE because peer is in _ignoreOffer state for", from);
+          return;
+        }
+
+        // Queue candidate if remoteDescription not yet set
         if (!pc.remoteDescription || !pc.remoteDescription.type) {
           pc._queuedCandidates = pc._queuedCandidates || [];
           pc._queuedCandidates.push(payload);
@@ -492,11 +516,18 @@ class WebRTCManager {
       const transceivers = pc.getTransceivers ? pc.getTransceivers() : [];
 
       // audio transceiver: choose first transceiver of kind 'audio'
-      const audioTransceiver = transceivers.find((t: RTCRtpTransceiver) => t.receiver && t.receiver.track && t.receiver.track.kind === 'audio' || (t.sender && t.sender.track && t.sender.track.kind === 'audio')) ??
-        transceivers.find((t: RTCRtpTransceiver) => t.mid === null && t.sender && t.sender && t.sender.track === null && t.receiver && t.receiver.track === null && t.sender && t.sender.track === null && (t as any).kind === 'audio');
+      const audioTransceiver = transceivers.find((t: RTCRtpTransceiver) =>
+        (t.receiver && t.receiver.track && t.receiver.track.kind === 'audio') ||
+        (t.sender && t.sender.track && t.sender.track.kind === 'audio') ||
+        (t && (t as any).kind === 'audio')
+      ) ?? null;
 
       // video transceivers: prefer first video transceiver as camera, second reserved for screen
-      const videoTransceivers = transceivers.filter((t: RTCRtpTransceiver) => (t.receiver && t.receiver.track && t.receiver.track.kind === 'video') || t.sender?.track?.kind === 'video' || (t && (t as any).kind === 'video'));
+      const videoTransceivers = transceivers.filter((t: RTCRtpTransceiver) =>
+        (t.receiver && t.receiver.track && t.receiver.track.kind === 'video') ||
+        (t.sender && t.sender.track && t.sender.track.kind === 'video') ||
+        (t && (t as any).kind === 'video')
+      );
       const cameraTransceiver = videoTransceivers.length > 0 ? videoTransceivers[0] : null;
 
       if (audioTrack) {
@@ -564,22 +595,45 @@ class WebRTCManager {
     pc._makingOffer = false;
     pc._ignoreOffer = false;
     pc._queuedCandidates = [];
-    // ✅ FIX: initialize polite to false here — deterministically computed in handleSignal
+    // ✅ initialize polite false (computed in handleSignal)
     pc._polite = false;
     pc._iceRestartTimer = null;
     pc._negotiationTimer = null;
 
     this.peers[targetId] = pc;
 
+    // --- CREATE STABLE TRANSCEIVERS UP FRONT (ensures consistent m-line order) ---
+    try {
+      const existing = pc.getTransceivers ? pc.getTransceivers() : [];
+      if (!existing || existing.length === 0) {
+        if (typeof pc.addTransceiver === "function") {
+          pc.addTransceiver("audio", { direction: "sendrecv" });
+          pc.addTransceiver("video", { direction: "sendrecv" }); // camera
+          pc.addTransceiver("video", { direction: "sendrecv" }); // reserved for screen share
+          this.log("Created stable transceivers for", targetId);
+        }
+      }
+    } catch (err) {
+      this.log("createPeer: addTransceiver failed (non-fatal):", err);
+    }
+
+    try {
+      if (!this.localStream) {
+        await this.ensureLocalStream(this.initialAudioEnabled, this.initialVideoEnabled);
+        this.log("Local stream ensured in createPeer", targetId);
+      }
+    } catch (err) {
+      this.log("ensureLocalStream failed in createPeer:", err);
+    }
+
     const existingSenders = pc.getSenders();
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
         const sameKindSender = existingSenders.find((s: any) => s.track?.kind === track.kind);
         if (sameKindSender) {
-          // replace existing track instead of re-adding
-          sameKindSender.replaceTrack(track);
+          try { sameKindSender.replaceTrack(track); } catch (e) { this.log("replaceTrack initial failed", e); }
         } else {
-          pc.addTrack(track, this.localStream);
+          try { pc.addTrack(track, this.localStream); } catch (e) { this.log("addTrack initial failed", e); }
         }
       });
     }
@@ -627,31 +681,6 @@ class WebRTCManager {
         this.onRemoteScreen?.(targetId, null);
       }
     };
-
-    // Ensure localStream exists (but do NOT attach tracks yet — transceivers first)
-    try {
-      if (!this.localStream) {
-        await this.ensureLocalStream(this.initialAudioEnabled, this.initialVideoEnabled);
-        this.log("Local stream ensured in createPeer", targetId);
-      }
-    } catch (err) {
-      this.log("ensureLocalStream failed in createPeer:", err);
-    }
-
-    // --- PATCH: create stable transceivers up-front to guarantee SDP m-line order ---
-    // Order matters: audio, camera-video, screen-video (reserved).
-    // Creating transceivers here prevents later add/remove from changing m-line order.
-    try {
-      const existing = pc.getTransceivers();
-      if (!existing || existing.length === 0) {
-        pc.addTransceiver("audio", { direction: "sendrecv" });
-        pc.addTransceiver("video", { direction: "sendrecv" }); // camera
-        pc.addTransceiver("video", { direction: "sendrecv" }); // reserved for screen share
-        this.log("Created stable transceivers for", targetId);
-      }
-    } catch (err) {
-      this.log("createPeer: addTransceiver failed (non-fatal):", err);
-    }
 
     if (initiator) {
       const dc = pc.createDataChannel("datachannel");
@@ -708,13 +737,12 @@ class WebRTCManager {
       }
     };
 
-    // --- FIX B: Debounce onnegotiationneeded ---
+    // --- Debounce onnegotiationneeded ---
     pc.onnegotiationneeded = async () => {
       if (pc.signalingState !== "stable") {
         this.log(`[useWebRTC] 🟡 skip negotiation → ${targetId} ${pc.signalingState}`);
         return;
       }
-      // prevent repeated renegotiation loops
       if (pc._makingOffer || pc.signalingState !== "stable") {
         this.log("🟡 skip negotiation →", targetId, pc.signalingState);
         return;
@@ -725,7 +753,6 @@ class WebRTCManager {
         this.log("🔁 onnegotiationneeded → creating offer for", targetId);
         const offer = await pc.createOffer();
 
-        // ensure still stable before applying
         if (pc.signalingState !== "stable") {
           this.log("🟡 abort offer; state changed mid-offer for", targetId);
           return;
@@ -745,9 +772,6 @@ class WebRTCManager {
         pc._makingOffer = false;
       }
     };
-
-    // --- End FIX B ---
-
 
     if (initiator) {
       try {
@@ -835,7 +859,6 @@ class WebRTCManager {
 
       const displayStream = await (navigator.mediaDevices as any).getDisplayMedia({
         video: { cursor: "always" },
-        // ✅ Safari & Chrome safety: must use boolean, not undefined
         audio: audioMode === "system",
       });
 
@@ -852,7 +875,6 @@ class WebRTCManager {
 
       this.screenStream = displayStream;
 
-      // ✅ Prevent re-adding duplicate senders (common cause of addTrack InvalidAccessError)
       Object.entries(this.peers).forEach(([peerId, pc]) => {
         if (pc.signalingState === "closed") return;
 
@@ -861,7 +883,6 @@ class WebRTCManager {
           addedSenders: RTCRtpSender[];
         } = { replaced: [], addedSenders: [] };
 
-        // === VIDEO ===
         const videoTrack = displayStream.getVideoTracks()[0] ?? null;
         if (videoTrack) {
           const videoSender = pc.getSenders().find((s) => s.track && s.track.kind === "video");
@@ -882,10 +903,9 @@ class WebRTCManager {
           }
         }
 
-        // === AUDIO ===
         const audioTrack = displayStream.getAudioTracks()[0] ?? null;
         if (audioTrack) {
-          const audioSender = pc.getSenders().find((s) => s.track && s.track.kind === "audio");
+          const audioSender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
           if (audioSender) {
             stored.replaced.push({ kind: "audio", sender: audioSender, originalTrack: audioSender.track || null });
             try {
@@ -907,13 +927,11 @@ class WebRTCManager {
           this.screenSenders[peerId] = stored as any;
         }
 
-        // ✅ Force renegotiation only when signalingState is stable
         if (pc.signalingState === "stable") {
           pc.onnegotiationneeded?.(new Event("negotiationneeded"));
         }
       });
 
-      // === Local updates ===
       this.sharingBy = this.userId;
       this.onSharingBy?.(this.userId);
       this.broadcastDataChannel({
@@ -921,7 +939,6 @@ class WebRTCManager {
         payload: { sharing: true, by: this.userId },
       });
 
-      // Auto-stop listener
       displayStream.getTracks().forEach((track: any) => {
         track.onended = () => this.stopScreenShare();
       });
@@ -929,7 +946,6 @@ class WebRTCManager {
       this.log("✅ startScreenShare: displayStream created, replacements made.");
     } catch (err) {
       this.log("❌ startScreenShare failed", err);
-      // cleanup
       if (this.screenStream) {
         try {
           this.screenStream.getTracks().forEach((t) => t.stop());
@@ -945,7 +961,6 @@ class WebRTCManager {
     try {
       this.log("🛑 Stopping screen share...");
 
-      // ✅ Stop only display tracks, keep camera/mic intact
       try {
         this.screenStream?.getTracks().forEach((track) => {
           try {
@@ -956,7 +971,6 @@ class WebRTCManager {
         this.log("Error stopping screenStream tracks", err);
       }
 
-      // === Restore original tracks ===
       Object.entries(this.screenSenders).forEach(([peerId, storedAny]) => {
         const pc = this.peers[peerId];
         if (!pc || pc.signalingState === "closed") return;
@@ -986,7 +1000,6 @@ class WebRTCManager {
           }
         });
 
-        // ✅ Re-add local audio if needed (fixes “silent peer after share” bug)
         const hasAudioSender = pc.getSenders().some((s) => s.track && s.track.kind === "audio");
         if (!hasAudioSender && this.localStream) {
           try {
@@ -997,13 +1010,11 @@ class WebRTCManager {
           }
         }
 
-        // ✅ Trigger renegotiation if stable
         if (pc.signalingState === "stable") {
           pc.onnegotiationneeded?.(new Event("negotiationneeded"));
         }
       });
 
-      // === Cleanup ===
       this.screenSenders = {};
       this.screenStream = null;
       this.sharingBy = null;
@@ -1069,7 +1080,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     mgr.onUsers = setUsers;
     mgr.onLocalStream = (s) => setLocalStream(s);
 
-    // ------------ Remote stream handling with automatic audio playback ------------
     mgr.onRemoteStream = (peerId, stream) => {
       setRemoteStreams(prev => {
         const newState = { ...prev };
@@ -1081,11 +1091,8 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
         return newState;
       });
 
-      // Create / manage an <audio> element when a remote stream with audio arrives.
       try {
-        // If stream is null -> cleanup
         if (!stream) {
-          // remove audio element
           const existing = remoteAudioEls.current[peerId];
           if (existing) {
             try { existing.pause(); } catch { }
@@ -1096,53 +1103,40 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
           return;
         }
 
-        // Only create audio element if stream has audio tracks (non-screen)
         const hasAudio = stream.getAudioTracks().length > 0;
         if (!hasAudio) return;
 
-        // If an audio element already exists for this peer, update srcObject
         let audioEl = remoteAudioEls.current[peerId];
         if (!audioEl) {
           audioEl = document.createElement("audio");
-          // Keep element out of layout
           audioEl.style.position = "fixed";
           audioEl.style.left = "-9999px";
           audioEl.style.width = "1px";
           audioEl.style.height = "1px";
           audioEl.autoplay = true;
-          // playsInline helps on mobile (iOS)
           audioEl.setAttribute("playsinline", "true");
-          audioEl.muted = false; // prefer audible; we will fallback to muted play if autoplay blocked
+          audioEl.muted = false;
           audioEl.preload = "auto";
-          // Some UAs require `muted` to be true to autoplay with sound; we'll try play and handle errors
           remoteAudioEls.current[peerId] = audioEl;
-          try { document.body.appendChild(audioEl); } catch (e) { /* If DOM not ready, ignore */ }
+          try { document.body.appendChild(audioEl); } catch (e) { /* ignore */ }
         }
 
         if (audioEl.srcObject !== stream) {
           audioEl.srcObject = stream;
         }
 
-        // Try to play. If autoplay blocked, attempt muted play then set a flag (console warns).
         const tryPlay = async () => {
           try {
             await audioEl.play();
-            // Playback succeeded without a user gesture
             console.log(`[useWebRTC] Playing remote audio for ${peerId}`);
-            // If it was muted to force play, unmute if possible (leave it muted if autoplay policy prevents)
             if (audioEl.muted) {
-              // attempt to unmute — may still be blocked without user gesture
-              try {
-                audioEl.muted = false;
-              } catch (e) { /* ignore */ }
+              try { audioEl.muted = false; } catch { /* ignore */ }
             }
           } catch (err) {
-            // Autoplay blocked: try muted play (this usually succeeds). Inform via console so UI can prompt user to unmute.
             console.warn(`[useWebRTC] Autoplay blocked for ${peerId}, attempting muted playback. User gesture required to unmute.`, err);
             try {
               audioEl.muted = true;
               await audioEl.play();
-              // Keep element muted; app UI should provide an unmute button that calls unmuteRemote(peerId).
               console.log(`[useWebRTC] Muted playback started for ${peerId}. Call unmuteRemote('${peerId}') on user gesture to unmute.`);
             } catch (err2) {
               console.error(`[useWebRTC] Muted playback also failed for ${peerId}`, err2);
@@ -1156,7 +1150,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       }
     };
 
-    // Remote screen streams handled separately
     mgr.onRemoteScreen = (peerId, stream) => {
       setRemoteScreens(prev => {
         const newState = { ...prev };
@@ -1166,7 +1159,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       });
     };
 
-    // Expose a helper on manager too (optional): unmute remote audio element (must be called on user gesture)
     (mgr as any).unmuteRemote = (peerId: string) => {
       const audioEl = remoteAudioEls.current[peerId];
       if (!audioEl) return;
@@ -1178,7 +1170,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       }
     };
 
-    // Also allow globally unmuting all remote audios on gesture
     (mgr as any).unmuteAllRemotes = () => {
       Object.values(remoteAudioEls.current).forEach(audioEl => {
         try {
@@ -1223,7 +1214,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
         mgrRef.current = null;
       }
 
-      // cleanup audio elements
       try {
         Object.values(remoteAudioEls.current).forEach((el) => {
           try { el.pause(); } catch { }
@@ -1302,7 +1292,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     let audioCtx: AudioContext | null = null, analyser: AnalyserNode | null = null, micSource: MediaStreamAudioSourceNode | null = null, rafId: number;
     const startVAD = async () => {
       try {
-        // --- FIX A: Check if localStream still has audio tracks ---
         if (localStream.getAudioTracks().length === 0) {
           console.log("VAD: No audio tracks found, skipping.");
           return;
@@ -1343,8 +1332,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     console.log("[useWebRTC disconnect] Hook disconnect called.");
     if (mgrRef.current) {
       mgrRef.current.disconnect();
-      // Let the effect cleanup null the ref on unmount - but if caller explicitly disconnects,
-      // we keep the ref around to allow reconnect if desired. (mgrRef.current internal guard prevents repeated runs)
       setLocalStream(null);
       setUsers([]);
       setRemoteStreams({});
@@ -1367,7 +1354,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
   const selectAudioDevice = useCallback((deviceId: string | null) => { mgrRef.current?.setAudioDevice(deviceId); }, []);
   const selectVideoDevice = useCallback((deviceId: string | null) => { mgrRef.current?.setVideoDevice(deviceId); }, []);
 
-  // expose unmute helpers for UI usage
   const unmuteRemote = useCallback((peerId: string) => {
     const el = remoteAudioEls.current[peerId];
     if (!el) return;
@@ -1415,7 +1401,6 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
     selectAudioDevice,
     selectVideoDevice,
     localStream,
-    // new helpers exposed
     unmuteRemote,
     unmuteAllRemotes,
   };
