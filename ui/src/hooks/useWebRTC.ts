@@ -41,8 +41,8 @@ type SignalMsg = {
 type DataChannelMessage =
   | { type: "content_update"; payload: string }
   | { type: "status_update"; payload: PeerStatus }
-  | { type: "screen_update"; payload: { sharing: boolean; by: string } };
-  // | { type: "chat_message"; payload: ChatMessagePayload }; // REMOVED
+  | { type: "screen_update"; payload: { sharing: boolean; by: string } }
+  | { type: "chat_message"; payload: ChatMessagePayload };
 
 const socketUrl = import.meta.env.VITE_WEBSOCKET_URL;
 const RECORDER_API_URL = import.meta.env.VITE_RECORDER_API_URL || "http://localhost:8001";
@@ -493,7 +493,7 @@ class WebRTCManager {
       const obj = JSON.parse(ev.data) as DataChannelMessage;
       if (obj.type === "content_update") this.onSharedContent?.(obj.payload);
       else if (obj.type === "status_update") this.onPeerStatus?.(peerId, obj.payload);
-      // else if (obj.type === "chat_message") this.onChat?.(obj.payload); // REMOVED: Chat now over WS
+      else if (obj.type === "chat_message") this.onChat?.(obj.payload); // REMOVED: Chat now over WS
       else if (obj.type === "screen_update") {
         const sharing = obj.payload.sharing;
         const sharer = obj.payload.by;
@@ -1057,6 +1057,7 @@ class WebRTCManager {
 
   // UPDATED: Send chat message via WebSocket to the server for persistence and broadcast
   sendChatMessage(payload: ChatMessagePayload) { 
+    this.broadcastDataChannel({ type: "chat_message", payload });
     this.wsSend({ 
       type: "chat_message_to_server", 
       from: this.userId,

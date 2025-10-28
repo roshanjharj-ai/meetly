@@ -312,8 +312,8 @@ const FloatingBot = ({
         // Set constraints relative to the viewport edges
         top: -top,
         left: -left,
-        right: innerWidth - (left + width),   
-        bottom: innerHeight - (top + height), 
+        right: innerWidth - (left + width),
+        bottom: innerHeight - (top + height),
       });
     };
 
@@ -321,7 +321,7 @@ const FloatingBot = ({
 
     window.addEventListener("resize", updateConstraints);
     return () => window.removeEventListener("resize", updateConstraints);
-  }, []); 
+  }, []);
 
   return (
     <motion.div
@@ -409,6 +409,14 @@ const MeetingLayout: React.FC<MeetingLayoutProps> = ({
     () => humanUsers.find((u) => u.id === pinnedUserId),
     [humanUsers, pinnedUserId]
   );
+
+  // useEffect(() => {
+  //   const isScreenSharingActive = remoteScreenStream !== null && sharingBy !== null;
+
+  //   if (isScreenSharingActive && pinnedUserId !== sharingBy) {
+  //     onPinUser(sharingBy);
+  //   }
+  // }, [remoteScreenStream, sharingBy]);
 
   // FIX 1: Re-order mainViewType logic to prioritize sharing
   const mainViewType = useMemo(() => {
