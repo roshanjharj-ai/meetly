@@ -4,10 +4,11 @@ import axios from "axios";
 import { motion } from "framer-motion";
 import { useContext, useState } from "react";
 import { FiArrowLeft, FiLock, FiMail, FiUser } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import aiLogo from "../../assets/ai-meet-icon.png"; // Adjust the import path as needed
 import { UserContext } from "../../context/UserContext"; // Adjust the import path as needed
+import { SignUp } from '../../services/api';
 
 // ❗ IMPORTANT: Replace with your actual Google Client ID from the Google Cloud Console
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";

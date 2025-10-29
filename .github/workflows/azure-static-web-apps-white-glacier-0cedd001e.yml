@@ -28,8 +28,17 @@ jobs:
           action: "upload"
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
-          app_location: "./ui" # App source code path
-          output_location: "dist" # Built app content directory - optional
+          app_location: "./ui" # App source code path (where 'npm install' and 'npm run build' run)
+          
+          # 🛑 IMPORTANT CHANGE: Use app_artifact_location to explicitly point to the final built assets.
+          # This prevents the deployment action from including extraneous files (like node_modules) 
+          # from the parent 'ui' directory, which causes the "too large" error.
+          app_artifact_location: "ui/dist" # Built app content directory, relative to the repository root.
+          
+          # You can remove 'output_location' as 'app_artifact_location' overrides its necessity for deployment.
+          # If you must keep it (for other Oryx behaviors), ensure it's not causing file scanning issues.
+          # output_location: "dist" 
+          
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:

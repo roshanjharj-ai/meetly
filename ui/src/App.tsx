@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { Navigate, Route, Routes, useParams, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { UserContext } from './context/UserContext';
 
 import MainLayout from './components/MainLayout';
@@ -14,13 +14,13 @@ import MeetingList from './components/meetingList/MeetingList';
 import ParticipantManager from './components/participant/ParticipantManager';
 
 import "./App.css";
-import DashboardHome from './components/Dashboard';
-import UserProfile from './components/UserProfile';
 import BotDetail from './components/bot/BotDetail';
 import BotManager from './components/bot/BotManager';
+import DashboardHome from './components/Dashboard';
 import MeetingHome from './components/meeting/MeetingHome';
 import PreJoinMeeting from './components/meeting/PreJoinMeeting';
 import OrganizationManager from './components/OrganizationManager';
+import UserProfile from './components/UserProfile';
 
 
 // --- Helper Component 1: ScopedRoutes (The content loader) ---
