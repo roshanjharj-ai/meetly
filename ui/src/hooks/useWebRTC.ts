@@ -52,6 +52,16 @@ const DEFAULT_BOT_NAMES = (window as any).__BOT_NAMES__ || ["Jarvis"];
 
 const isRecorderBot = (name: string): boolean => name.startsWith("RecorderBot");
 
+// Helper: deterministic, string-safe politeness check
+function stableHash(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h) + str.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h);
+}
+
 class WebRTCManager {
   room: string;
   userId: string;
@@ -134,6 +144,18 @@ class WebRTCManager {
     else if (this.ws.readyState === WebSocket.CONNECTING) {
       this.ws.addEventListener("open", () => this.ws?.send(s), { once: true });
     }
+  }
+
+  // FIX: Extract politeness calculation
+  isPolite(otherId: string): boolean {
+    const hThis = stableHash(this.userId);
+    const hOther = stableHash(otherId);
+    let polite = false;
+    // Tie-break: polite if my hash is greater than other's hash
+    if (hThis !== hOther) polite = hThis > hOther;
+    // Secondary tie-break: polite if my userId string is lexicographically greater
+    else polite = this.userId > otherId;
+    return polite;
   }
 
   async ensureLocalStream(audioEnabled: boolean = true, videoEnabled: boolean = true): Promise<MediaStream | null> {
@@ -334,7 +356,10 @@ class WebRTCManager {
               continue;
             }
             const isBot = DEFAULT_BOT_NAMES.includes(peerId);
-            const initiator = isBot || this.userId < peerId;
+            // FIX: Use isPolite to determine if we should initiate (if we are NOT polite)
+            const weArePolite = this.isPolite(peerId);
+            const initiator = isBot || !weArePolite; // We initiate if we're impolite or it's a bot
+            
             // Prevent duplicate creation if createPeer was triggered recently
             if (!this.creatingPeer[peerId]) {
               this.createPeer(peerId, initiator).catch(err => this.log("createPeer error (user_list):", err));
@@ -370,7 +395,10 @@ class WebRTCManager {
     if (!pc && !this.creatingPeer[from]) {
       this.creatingPeer[from] = true;
       try {
-        pc = await this.createPeer(from, false);
+        // FIX: Calculate initiator role for responder as well. The polite peer MUST NOT be an initiator.
+        const weArePolite = this.isPolite(from);
+        const initiator = DEFAULT_BOT_NAMES.includes(from) ? false : !weArePolite;
+        pc = await this.createPeer(from, initiator);
       } catch (err) {
         this.log("createPeer (responder) failed for", from, err);
       } finally {
@@ -384,22 +412,11 @@ class WebRTCManager {
     }
 
     // --- deterministic, string-safe politeness check ---
-    function stableHash(str: string): number {
-      let h = 0;
-      for (let i = 0; i < str.length; i++) {
-        h = ((h << 5) - h) + str.charCodeAt(i);
-        h |= 0;
-      }
-      return Math.abs(h);
-    }
-    // FIX: tie-break deterministic polite calculation using userId when hash ties
-    const hThis = stableHash(this.userId);
-    const hFrom = stableHash(from);
-    let polite = false;
-    if (hThis !== hFrom) polite = hThis > hFrom;
-    else polite = this.userId > from; // tie-break by string comparison
+    // The existing politeness logic remains correct here for runtime collision resolution
+    // but we use the new helper function for consistency and logging.
+    const polite = this.isPolite(from);
     pc._polite = polite;
-    this.log(`Politeness check: ${this.userId} vs ${from} → ${polite ? "polite" : "impolite"} (hash ${hThis} vs ${hFrom})`);
+    this.log(`Politeness check: ${this.userId} vs ${from} → ${polite ? "polite" : "impolite"}`);
 
     // --- offer-collision logic ---
     const isOfferCollision = action === "offer" &&
@@ -600,14 +617,20 @@ class WebRTCManager {
   async createPeer(targetId: string, initiator: boolean): Promise<RTCPeerConnection & any> {
     if (this.peers[targetId] || this.creatingPeer[targetId]) return this.peers[targetId];
     this.creatingPeer[targetId] = true;
-    this.log("🧩 createPeer →", targetId, "initiator:", initiator);
+    
+    // FIX: Calculate politeness here to ensure the polite peer is never an initiator
+    const weArePolite = this.isPolite(targetId);
+    const finalInitiator = initiator && !weArePolite; 
+
+    this.log("🧩 createPeer →", targetId, "initial initiator:", initiator, "final initiator:", finalInitiator, "weArePolite:", weArePolite);
+
 
     const pc: RTCPeerConnection & any = new RTCPeerConnection(this.iceConfig) as any;
     pc._makingOffer = false;
     pc._ignoreOffer = false;
     pc._queuedCandidates = [];
-    // ✅ initialize polite false (computed in handleSignal)
-    pc._polite = false;
+    // ✅ initialize polite based on early calculation
+    pc._polite = weArePolite;
     pc._iceRestartTimer = null;
     pc._negotiationTimer = null;
 
@@ -693,7 +716,7 @@ class WebRTCManager {
       }
     };
 
-    if (initiator) {
+    if (finalInitiator) {
       const dc = pc.createDataChannel("datachannel");
       dc.onmessage = (ev: any) => this.handleDataChannelMessage(ev, targetId);
       this.dataChannels[targetId] = dc;
@@ -784,7 +807,7 @@ class WebRTCManager {
       }
     };
 
-    if (initiator) {
+    if (finalInitiator) {
       try {
         pc._makingOffer = true;
         const offer = await pc.createOffer();
