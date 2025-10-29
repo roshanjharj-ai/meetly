@@ -14,6 +14,7 @@ export default function JoinMeeting() {
     const [prefDevice, setPrefDevice] = useState<{ audioDeviceId?: string, videoDeviceId?: string }>({ audioDeviceId: "", videoDeviceId: "" });
     const navigate = useNavigate();
     const userContext = useContext(UserContext);
+    const customerSlug = userContext.user?.customer_slug || 'default';
 
     const handleInitialJoin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,7 +35,7 @@ export default function JoinMeeting() {
     const handleFinalJoin = () => {
         if (userContext.user?.user_name) {
             let prefDeviceString = (typeof prefDevice != 'undefined') ? "&prefDeviceString=" + encodeURIComponent(JSON.stringify(prefDevice)) : "";
-            navigate(`/meet?room=${encodeURIComponent(roomId.trim())}&user=${encodeURIComponent(userContext.user.user_name)}${prefDeviceString}`, {
+            navigate(`/${customerSlug}/meet?room=${encodeURIComponent(roomId.trim())}&user=${encodeURIComponent(userContext.user.user_name)}${prefDeviceString}`, {
                 state: { initialAudioEnabled: devicePrefs.audioEnabled, initialVideoEnabled: devicePrefs.videoEnabled, }
             });
         } else {
