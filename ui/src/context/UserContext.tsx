@@ -79,8 +79,11 @@ export const UserContextProvider = ({ children }: UserContextProviderRequest) =>
                 email: userProfile.email,
                 full_name: userProfile.full_name,
                 mobile: userProfile.mobile,
-		        picture: userProfile.picture,
-                photo_url: userProfile.photo_url
+                picture: userProfile.picture,
+                photo_url: userProfile.photo_url,
+                customer_id: userProfile.customer_id,
+                customer_slug: userProfile.customer_slug,
+                user_type: userProfile.user_type
             });
         } catch (error) {
             console.error("Failed to fetch user details:", error);

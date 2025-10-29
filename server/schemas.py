@@ -1,3 +1,4 @@
+# schemas.py
 from pydantic import BaseModel, EmailStr,Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -21,6 +22,42 @@ class VerifyCodeResponse(BaseModel):
     message: str
     token: Optional[str] = None
 
+# --- NEW: Customer Schemas ---
+class CustomerBase(BaseModel):
+    name: str
+    logo_url: Optional[str] = None
+    email_sender_name: Optional[str] = 'System Bot'
+    default_meeting_name: Optional[str] = 'Team Meeting'
+    url_slug: str # NEW: Required for URL routing
+
+class CustomerCreate(CustomerBase):
+    pass 
+
+class Customer(CustomerBase):
+    id: int
+    email_config_json: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
+# --- NEW: Meeting Configuration Payload ---
+class MeetingPermissionConfig(BaseModel):
+    # Global/Default permissions for the meeting
+    allow_screen_share: bool = True
+    allow_video: bool = True
+    allow_audio: bool = True
+    allow_group_chat: bool = True
+    allow_private_chat: bool = True
+    
+    # Per-participant overrides (participant_id: permission_dict)
+    # Stored as strings because participant_id is int but model doesn't enforce
+    participant_overrides: Dict[str, Dict[str, bool]] = Field(default_factory=dict)
+    
+    # Speaker list for Webinar/One-on-One
+    speaker_ids: List[int] = Field(default_factory=list)
+
+
 # --- Participant Schemas ---
 class ParticipantBase(BaseModel):
     name: str
@@ -32,6 +69,7 @@ class ParticipantCreate(ParticipantBase):
 
 class Participant(ParticipantBase):
     id: int
+    customer_id: int # NEW
     class Config:
         from_attributes = True
 
@@ -41,31 +79,33 @@ class MeetingBase(BaseModel):
     agenda: Optional[str] = None
     date_time: datetime
     meeting_link: Optional[str] = None
+    meeting_type: str = 'Multi-Participant' # NEW
+    config: Optional[MeetingPermissionConfig] = None # NEW (pydantic object for input)
 
 class MeetingCreate(MeetingBase):
     participant_ids: List[int] = []
 
 class Meeting(MeetingBase):
     id: int
+    customer_id: int # NEW
     participants: List[Participant] = []
+    config_json: Optional[str] = None # The raw JSON string from the DB (for output)
+
     class Config:
         from_attributes = True
 
 # --- NEW: Chat Message Schemas ---
 class AttachmentPayload(BaseModel):
     name: str
-    dataUrl: Optional[str] = None # For sending, optional when retrieving history
-    url: Optional[str] = None # For retrieval, the stored URL
+    dataUrl: Optional[str] = None 
+    url: Optional[str] = None 
 
 class ChatMessagePayload(BaseModel):
-    # This is the client-side/WS payload
-    id: str # Client-generated ID (for deduplication/keying)
+    id: str 
     from_user: str = Field(alias="from")
     text: Optional[str] = None
     attachments: Optional[List[AttachmentPayload]] = None
-    ts: int # Client timestamp (ms)
-    
-    # New: Target for private chat. 'Group' or user_id.
+    ts: int 
     to_user: Optional[str] = Field(None, alias="to") 
     
     class Config:
@@ -73,10 +113,9 @@ class ChatMessagePayload(BaseModel):
         populate_by_name = True
 
 class ChatMessageDB(ChatMessagePayload):
-    # This is the server-side/DB model
-    db_id: Optional[int] = Field(None, alias="id") # Database ID
+    db_id: Optional[int] = Field(None, alias="id")
     room_id: str
-    timestamp: datetime # Database timestamp
+    timestamp: datetime
     
     class Config:
         from_attributes = True
@@ -97,6 +136,7 @@ class BotConfigUpdate(BotConfigBase):
 
 class BotConfig(BotConfigBase):
     id: int
+    customer_id: int # NEW
     status: str = "Offline"
     current_meeting_id: Optional[str] = None
     current_meeting_subject: Optional[str] = None
@@ -149,7 +189,7 @@ class MeetingState(BaseModel):
 
     class Config:
         from_attributes = True
-        
+
 # --- User & Auth Schemas ---
 class UserBase(BaseModel):
     email: EmailStr
@@ -164,13 +204,18 @@ class UserUpdate(BaseModel):
 class UserCreate(UserBase):
     password: str
     user_name: str
+    customer_id: int 
 
 class User(UserBase):
     id: int
+    customer_id: int 
     provider: str
     user_name: Optional[str] = None
     mobile: Optional[str] = None
     picture: Optional[str] = None
+    user_type: str = 'Member' # NEW: Expose user type
+    customer_slug: Optional[str] = None # NEW: Passed from backend for frontend routing
+
     class Config:
         from_attributes = True
 
@@ -180,7 +225,9 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
-    
+    customer_id: Optional[int] = None
+    user_type: Optional[str] = None # NEW: Include user type in token data
+   
     
 class LLMCostEntry(BaseModel):
     date: datetime

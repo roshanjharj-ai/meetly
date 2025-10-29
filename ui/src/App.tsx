@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams, useLocation } from 'react-router-dom';
 import { UserContext } from './context/UserContext';
 
 import MainLayout from './components/MainLayout';
@@ -20,12 +20,46 @@ import BotDetail from './components/bot/BotDetail';
 import BotManager from './components/bot/BotManager';
 import MeetingHome from './components/meeting/MeetingHome';
 import PreJoinMeeting from './components/meeting/PreJoinMeeting';
+import OrganizationManager from './components/OrganizationManager';
 
+
+// --- Helper Component 1: ScopedRoutes (The content loader) ---
+const ScopedRoutes = ({ onLogout, user }: { onLogout: () => void, user: any }) => {
+  const { customerSlug } = useParams<{ customerSlug: string }>();
+
+  // CRITICAL GUARD: Redirect if the URL slug doesn't match the authenticated user's slug
+  if (customerSlug !== user.customer_slug) {
+    return <Navigate to={`/${user.customer_slug}/dashboard`} replace />;
+  }
+
+  return (
+    <Routes>
+      <Route element={<MainLayout onLogout={onLogout} />}>
+        <Route path="dashboard" element={<DashboardHome user={user} />} />
+        <Route path="join" element={<JoinMeeting />} />
+        <Route path="prejoin" element={<JoinMeeting />} />
+        <Route path="meetings" element={<MeetingList />} />
+        <Route path="participants" element={<ParticipantManager />} />
+        <Route path='bots' element={<BotManager />} />
+        <Route path='bots/:botId' element={<BotDetail />} />
+        <Route path="calendar" element={<CalendarView />} />
+        <Route path="meet/*" element={<MeetingHome />} />
+        <Route path="profile" element={<UserProfile />} />
+        {user.user_type === 'Admin' && (
+          <Route path="organization" element={<OrganizationManager />} />
+        )}
+      </Route>
+      {/* Catch-all for paths under the valid slug */}
+      <Route path="*" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
+    </Routes>
+  );
+};
+
+
+// --- Main App Component ---
 export default function App() {
-  // Destructure values from the UserContext
   const { token, user, logout, isLoading, theme } = useContext(UserContext);
 
-  // While the context is checking for a token, show a loading state
   if (isLoading) {
     return (
       <div className="vh-100 d-flex justify-content-center align-items-center">
@@ -36,53 +70,45 @@ export default function App() {
     );
   }
 
-  // --- Router for Unauthenticated Users ---
-  // If no token is present, only show the login and signup pages
-  if (!token) {
-    return (
-      <div className="vh-100" data-bs-theme={theme}>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/prejoin" element={<PreJoinMeeting />} />
-            <Route path="/login" element={<StartMeeting />} />
-            <Route path="/signup" element={<Signup />} />
-            {/* Any other path redirects to the login page */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </div>
-    );
-  }
+  const isAuthenticated = token && user && user.customer_id && user.customer_slug;
+  const customerSlug = user?.customer_slug || 'default';
 
-  // --- Router for Authenticated Users ---
-  // If a token exists, show the main application layout and protected routes
   return (
-    user != null && (
-      <div className="vh-100" data-bs-theme={theme}>
-        <BrowserRouter>
-          <Routes>
-            {/* All protected routes are children of the MainLayout */}
-            <Route element={<MainLayout onLogout={logout} />}>
-              <Route path="/" element={<DashboardHome user={user} />} />
-              <Route path="/prejoin" element={<JoinMeeting />} />
-              <Route path="/join" element={<JoinMeeting />} />
-              <Route path="/meetings" element={<MeetingList />} />
-              <Route path="/participants" element={<ParticipantManager />} />
-              <Route path='/bots' element={<BotManager />} />
-              <Route path='/bots/:botId' element={<BotDetail />} />
-              <Route path="/calendar" element={<CalendarView />} />
-              <Route path="/meet/*" element={<MeetingHome />} />
-              <Route path="/profile" element={<UserProfile />} />
-            </Route>
+    <div className="vh-100" data-bs-theme={theme}>
+      <Routes>
 
-            {/* If a logged-in user tries to access login/signup, redirect to home */}
-            <Route path="/login" element={<Navigate to="/" replace />} />
-            <Route path="/signup" element={<Navigate to="/" replace />} />
+        {/* --- Public (Unauthenticated) Routes --- */}
+        {!isAuthenticated && (
+          <>
+            {/* Public paths serve the login/signup pages */}
+            <Route path="/:customerSlug/prejoin" element={<PreJoinMeeting />} />
+            <Route path="/prejoin" element={<PreJoinMeeting />} />
+            <Route path="/:customerSlug/login" element={<StartMeeting />} />
+            <Route path="/login" element={<StartMeeting />} />
+            <Route path="/:customerSlug/signup" element={<Signup />} />
+            <Route path="/signup" element={<Signup />} />
 
-            {/* Any other unknown path for a logged-in user redirects to home */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </div>)
+            {/* Default redirect for all unauthenticated users */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </>
+        )}
+
+        {/* --- Protected (Authenticated) Route Block --- */}
+        {isAuthenticated && (
+          <>
+            {/* 1. Catch all public/unscoped entry points and redirect to the scoped dashboard */}
+            <Route path="/" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
+            <Route path="/login" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
+            <Route path="/signup" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
+
+            {/* 2. MAIN SCOPED ROUTE: This is the only path that renders actual application content */}
+            <Route path={`/:customerSlug/*`} element={<ScopedRoutes onLogout={logout} user={user} />} />
+
+            {/* 3. FAILSAFE: If authenticated but somehow hit a path not covered, redirect to the scoped dashboard */}
+            <Route path="*" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
+          </>
+        )}
+      </Routes>
+    </div>
   );
 }

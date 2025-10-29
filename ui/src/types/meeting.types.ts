@@ -37,13 +37,16 @@ export type UserAndRoom = {
     full_name?: string;
     mobile?: string;
     picture?: string;
+    customer_slug?: string;
+    customer_id?: string;
+    user_type?: string;
 }
 
 export interface FullUserProfile extends UserAndRoom {
-  full_name?: string;
-  mobile?: string;
-  photo_url?: string;
-  // Add any other fields that your backend's User schema provides
+    full_name?: string;
+    mobile?: string;
+    photo_url?: string;
+    // Add any other fields that your backend's User schema provides
 }
 
 export const ControlActionTypes = {

@@ -1,12 +1,13 @@
 // src/pages/Bot/BotManager.tsx
 
 import { motion } from 'framer-motion';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { FiAlertTriangle, FiCheckCircle, FiEdit, FiInfo, FiMonitor, FiPlus, FiSettings, FiTool, FiTrash2, FiTrendingUp, FiZap } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { createBotConfig, deleteBotConfig, getBotConfigs, updateBotConfig, type BotConfig } from '../../services/api';
 import AlertModal from '../shared/AlertModal';
 import BotConfigDrawer from './BotConfigDrawer';
+import { UserContext } from '../../context/UserContext';
 
 // --- UTILITY COMPONENTS ---
 
@@ -74,7 +75,7 @@ const BotManagerSkeleton = () => (
 );
 
 // --- INNOVATIVE LIVE BOT CARD ---
-const LiveBotCard = ({ bot, navigate }: { bot: BotConfig, navigate: any }) => {
+const LiveBotCard = ({ bot, navigate, customerSlug }: { bot: BotConfig, navigate: any, customerSlug: string }) => {
     const statusColor = bot.status === 'Attending' ? 'success' : 'primary';
     const Pulse = bot.status === 'Attending' ? motion.div : React.Fragment;
 
@@ -97,7 +98,7 @@ const LiveBotCard = ({ bot, navigate }: { bot: BotConfig, navigate: any }) => {
                     height: '100px',
                     cursor: 'pointer'
                 }}
-                onClick={() => navigate(`/bots/${bot.id}`)}
+                onClick={() => navigate(`/${customerSlug}/bots/${bot.id}`)}
             >
                 <div className="d-flex align-items-center justify-content-between">
                     <div className="d-flex align-items-center gap-2 text-dark">
@@ -135,6 +136,8 @@ export default function BotManager() {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [botToEdit, setBotToEdit] = useState<BotConfig | null>(null);
     const [botToDelete, setBotToDelete] = useState<BotConfig | null>(null);
+    const { user } = useContext(UserContext);
+    const customerSlug = user?.customer_slug || 'default';
 
     const fetchBots = async () => {
         setIsLoading(true);
@@ -208,7 +211,7 @@ export default function BotManager() {
                 <div className="d-flex flex-wrap gap-4">
                     {liveBots.length > 0 ? (
                         liveBots.map(bot => (
-                            <LiveBotCard key={bot.id} bot={bot} navigate={navigate} />
+                            <LiveBotCard key={bot.id} bot={bot} navigate={navigate} customerSlug={customerSlug} />
                         ))
                     ) : (
                         <p className="text-muted small">No bots are currently attending a meeting. Create one and assign it!</p>

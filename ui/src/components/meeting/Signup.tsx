@@ -18,6 +18,10 @@ const Signup = () => {
   const navigate = useNavigate();
   const { login } = useContext(UserContext);
 
+  // NEW: Get customerSlug from URL if present (e.g., /test-company/signup)
+  const { customerSlug } = useParams<{ customerSlug: string }>();
+  const redirectPath = customerSlug ? `/${customerSlug}/dashboard` : "/";
+
   const [formData, setFormData] = useState({
     user_name: "",
     name: "",
@@ -29,12 +33,10 @@ const Signup = () => {
 
   /**
    * Handles the local database sign-up process.
-   * First, it creates the user via the /signup endpoint.
-   * Then, it automatically logs them in by calling the /token endpoint.
    */
   const handleLocalSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.password) {
+    if (!formData.name || !formData.email || !formData.password || !formData.user_name) {
       setError("Please fill out all fields.");
       return;
     }
@@ -49,8 +51,10 @@ const Signup = () => {
         password: formData.password,
         full_name: formData.name,
         user_name: formData.user_name,
+        customer_id: 1,
+        user_type: 1
       };
-      await axios.post(`${API_BASE_URL}/signup`, signupPayload);
+      await SignUp(signupPayload);
 
       // Step 2: Automatically log the user in to get a token
       const loginFormData = new URLSearchParams();
@@ -60,7 +64,7 @@ const Signup = () => {
 
       // Step 3: Update the global state and redirect
       login(tokenResponse.data.access_token);
-      navigate("/");
+      navigate(redirectPath);
 
     } catch (err: any) {
       setError(err.response?.data?.detail || "Signup failed. The email might already be in use.");
@@ -88,7 +92,7 @@ const Signup = () => {
 
       // Update global state with our app's token and redirect
       login(response.data.access_token);
-      navigate("/");
+      navigate(redirectPath);
 
     } catch (err: any) {
       setError(err.response?.data?.detail || "Google Sign-in failed. Please try again.");
@@ -133,7 +137,7 @@ const Signup = () => {
           {/* Local Signup Form */}
           <form onSubmit={handleLocalSignup} className="text-start">
             <div className="form-floating mb-3">
-              <input type="text" id="user_name" placeholder="Full Name" value={formData.user_name}
+              <input type="text" id="user_name" placeholder="User Name" value={formData.user_name}
                 onChange={(e) => setFormData((p) => ({ ...p, user_name: e.target.value }))}
                 className="form-control form-control-lg bg-transparent text-light border-light" required />
               <label htmlFor="user_name" className="text-light"><FiUser className="me-2" /> User Name</label>
@@ -177,7 +181,7 @@ const Signup = () => {
           </div>
 
           {/* Back to Login Link */}
-          <button onClick={() => navigate("/login")}
+          <button onClick={() => navigate(customerSlug ? `/${customerSlug}/login` : "/login")}
             className="btn btn-outline-light d-flex align-items-center justify-content-center gap-2 w-100 mt-2">
             <FiArrowLeft /> Already have an account? Log In
           </button>

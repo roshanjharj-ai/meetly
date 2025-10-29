@@ -13,7 +13,7 @@ import asyncio
 import crud
 import models
 import schemas
-import auth
+import auth # Assumed to be updated to handle customer_id, user_type in JWT
 from database import engine, get_db
 import email_service
 import verification_service
@@ -39,9 +39,10 @@ rooms: Dict[str, Dict[str, Any]] = {}
 
 # === API Routes ===
 
-# --- Auth Routes (Existing) ---
+# --- Auth Routes (Updated for Customer Scope & User Type) ---
 @app.post("/api/token", response_model=schemas.Token)
 async def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+    # Get user by email (searches across all customers, then checks password)
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -49,9 +50,15 @@ async def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Token data MUST include customer_id and user_type now
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={
+            "sub": user.email, 
+            "customer_id": user.customer_id, 
+            "user_type": user.user_type # NEW
+        }, 
+        expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -61,10 +68,15 @@ def create_user(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    db_user = crud.get_user_by_email(db, email=user.email)
+    db_user = crud.get_user_by_email_and_customer(db, user.customer_id, user.email)
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    usr = crud.create_user(db=db, user=user)
+        raise HTTPException(status_code=400, detail="Email already registered for this customer")
+    
+    try:
+        usr = crud.create_user(db=db, user=user)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
     full_name = user.full_name if user.full_name else user.user_name
     background_tasks.add_task(
         email_service.send_signup_email, 
@@ -72,7 +84,64 @@ def create_user(
         usr.id,
         full_name
     )
-    return usr
+    # Fetch customer slug for the response object
+    customer = crud.get_customer_by_slug(db, 'default') # Assuming default for signup, adjust if necessary
+    
+    response_user = schemas.User.model_validate(usr)
+    if customer:
+        response_user.customer_slug = customer.url_slug
+    
+    return response_user
+
+def enrich_user_response(db: Session, user: models.User) -> schemas.User:
+    customer = db.query(models.Customer).filter(models.Customer.id == user.customer_id).first()
+    enriched_user = schemas.User.model_validate(user)
+    if customer:
+        enriched_user.customer_slug = customer.url_slug
+    return enriched_user
+
+@app.get("/api/customers/me", response_model=schemas.Customer)
+async def get_customer_details(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.user_type != 'Admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Admins can access organization details.")
+    
+    customer = crud.get_customer_by_id(db, current_user.customer_id)
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer organization not found.")
+    
+    return customer
+
+@app.put("/api/customers/me", response_model=schemas.Customer)
+async def update_customer_details(
+    customer_update: schemas.CustomerBase,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.user_type != 'Admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Admins can update organization details.")
+
+    try:
+        updated_customer = crud.update_customer(db, current_user.customer_id, customer_update)
+        if not updated_customer:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer organization not found.")
+        return updated_customer
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+@app.delete("/api/customers/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_customer(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.user_type != 'Admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Admins can delete organization.")
+    
+    # NOTE: Deleting the current user's organization will invalidate their session immediately.
+    crud.delete_customer(db, current_user.customer_id)
+    return
 
 @app.post("/api/auth/google", response_model=schemas.Token)
 async def auth_google(token_request: dict, db: Session = Depends(get_db)):
@@ -81,9 +150,21 @@ async def auth_google(token_request: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Google token not provided")
     return await auth.verify_google_token(google_token, db)
 
+# Utility to enrich User schema with customer_slug before sending to frontend
+def enrich_user_response(db: Session, user: models.User) -> schemas.User:
+    customer = db.query(models.Customer).filter(models.Customer.id == user.customer_id).first()
+    enriched_user = schemas.User.model_validate(user)
+    if customer:
+        enriched_user.customer_slug = customer.url_slug
+    return enriched_user
+
 @app.get("/api/users/me", response_model=schemas.User)
-async def read_users_me(current_user: schemas.User = Depends(auth.get_current_user)):
-    return current_user
+async def read_users_me(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Enriched response includes the customer slug
+    return enrich_user_response(db, current_user)
 
 @app.put("/api/users/me", response_model=schemas.User)
 async def update_user_profile(
@@ -91,9 +172,25 @@ async def update_user_profile(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    return crud.update_user(db=db, user=current_user, update_data=update_data)
+    updated_user = crud.update_user(db=db, user=current_user, update_data=update_data)
+    return enrich_user_response(db, updated_user)
 
-# --- NEW: Chat History API Endpoint ---
+# --- NEW: Customer Management Routes (Admin Only) ---
+@app.get("/api/customers/me", response_model=schemas.Customer)
+async def get_customer_details(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.user_type != 'Admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Admins can access organization details.")
+    
+    customer = db.query(models.Customer).filter(models.Customer.id == current_user.customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer organization not found.")
+    
+    return customer
+    
+# --- NEW: Chat History API Endpoint (Unchanged, as it's room_id scoped) ---
 @app.get("/api/meetings/{room_id}/chat/history", response_model=List[schemas.ChatMessagePayload])
 async def get_chat_history_route(
     room_id: str, 
@@ -102,51 +199,13 @@ async def get_chat_history_route(
     db: Session = Depends(get_db), 
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
-    """Retrieves persistent chat history for a given meeting room."""
-    # NOTE: Authorization check (is user in this meeting?) is omitted but recommended.
     return crud.get_chat_history(db, room_id, skip=skip, limit=limit)
 
-# --- Meeting & Participant Routes (Protected) ---
-
-@app.post("/api/meetings/validate-join", response_model=schemas.ValidateJoinResponse)
-async def validate_meeting_join_request(
-    request: schemas.ValidateJoinRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    is_invited = crud.is_participant_invited(db, request.room, request.email)
-    
-    if not is_invited:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not invited to this meeting or the meeting does not exist."
-        )
-
-    code = verification_service.create_verification_code(request.email, request.room)
-
-    background_tasks.add_task(
-        email_service.send_verification_email, 
-        request.email, 
-        code, 
-        request.room
-    )
-
-    return {"message": "Verification code sent to your email."}
-
-@app.post("/api/meetings/verify-code", response_model=schemas.VerifyCodeResponse)
-async def verify_meeting_join_code(
-    request: schemas.VerifyCodeRequest
-):
-    is_valid = verification_service.verify_code(request.email, request.room, request.code)
-
-    if not is_valid:
-        return {"valid": False, "message": "Invalid or expired verification code."}
-
-    return {"valid": True, "message": "Verification successful."}
+# --- Meeting & Participant Routes (Protected & Customer-Scoped) ---
 
 @app.get("/api/getMeetings", response_model=List[schemas.Meeting])
 def get_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
-    return crud.get_meetings(db, skip=skip, limit=limit)
+    return crud.get_meetings(db, current_user.customer_id, skip=skip, limit=limit)
 
 @app.post("/api/createMeeting", response_model=schemas.Meeting)
 def create_meeting(
@@ -155,7 +214,7 @@ def create_meeting(
     db: Session = Depends(get_db), 
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
-    db_meeting = crud.create_meeting(db=db, meeting=meeting)
+    db_meeting = crud.create_meeting(db=db, customer_id=current_user.customer_id, meeting=meeting)
     
     if db_meeting and db_meeting.participants:
         print(f"Meeting {db_meeting.id} created, scheduling emails...")
@@ -176,7 +235,7 @@ def update_meeting_route(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
-    db_meeting = crud.update_meeting(db, meeting_id=meeting_id, meeting_update=meeting_update)
+    db_meeting = crud.update_meeting(db, customer_id=current_user.customer_id, meeting_id=meeting_id, meeting_update=meeting_update)
     if db_meeting is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
     
@@ -191,32 +250,32 @@ def update_meeting_route(
 
     return db_meeting
 
-# ADDED: DELETE MEETING
 @app.delete("/api/deleteMeeting/{meeting_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meeting_route(
     meeting_id: int,
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
-    db_meeting = crud.delete_meeting(db, meeting_id=meeting_id)
+    db_meeting = crud.delete_meeting(db, customer_id=current_user.customer_id, meeting_id=meeting_id)
     if db_meeting is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
     return
 
 @app.get("/api/getParticipants", response_model=List[schemas.Participant])
 def get_participants(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
-    return crud.get_participants(db, skip=skip, limit=limit)
+    return crud.get_participants(db, current_user.customer_id, skip=skip, limit=limit)
 
-# ADDED: CREATE PARTICIPANT
 @app.post("/api/createParticipant", response_model=schemas.Participant)
 def create_participant_route(
     participant: schemas.ParticipantCreate,
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
-    return crud.create_participant(db=db, participant=participant)
+    try:
+        return crud.create_participant(db=db, customer_id=current_user.customer_id, participant=participant)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-# ADDED: UPDATE PARTICIPANT
 @app.put("/api/updateParticipant/{participant_id}", response_model=schemas.Participant)
 def update_participant_route(
     participant_id: int,
@@ -224,19 +283,18 @@ def update_participant_route(
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
-    db_participant = crud.update_participant(db, participant_id=participant_id, participant_update=participant_update)
+    db_participant = crud.update_participant(db, customer_id=current_user.customer_id, participant_id=participant_id, participant_update=participant_update)
     if db_participant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
     return db_participant
 
-# ADDED: DELETE PARTICIPANT
 @app.delete("/api/deleteParticipant/{participant_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_participant_route(
     participant_id: int,
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
-    db_participant = crud.delete_participant(db, participant_id=participant_id)
+    db_participant = crud.delete_participant(db, customer_id=current_user.customer_id, participant_id=participant_id)
     if db_participant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
     return

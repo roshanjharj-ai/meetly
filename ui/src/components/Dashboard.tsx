@@ -3,14 +3,15 @@
 import { useEffect, useState } from 'react';
 import { FaCalendarAlt, FaFileAlt, FaPlay, FaPlus, FaUsers } from 'react-icons/fa';
 import { FiMonitor } from 'react-icons/fi'; // New icon for Bot Management
+import { RiOrganizationChart } from 'react-icons/ri'; // New icon for Organization
 import { useNavigate } from 'react-router-dom';
-import { getMeetings } from '../services/api';
-import type { Meeting, UserAndRoom } from '../types/meeting.types';
-import { formatDate } from '../utils/Utilities';
+import { getMeetings } from '../services/api'; // Corrected relative path
+import type { Meeting, UserAndRoom } from '../types/meeting.types'; // Corrected relative path
+import { formatDate } from '../utils/Utilities'; // Corrected relative path
 
 
 interface DashboardProps {
-    user: UserAndRoom;
+    user: UserAndRoom & { customer_slug: string; user_type: string }; // Extended User type
 }
 
 // --- Placeholder Components (Skeletons) ---
@@ -53,9 +54,15 @@ const SkeletonOutcomeCard = () => (
 
 const DashboardHome = ({ user }: DashboardProps) => {
     const navigate = useNavigate();
-    // 0: Initial, 1: Loading, -1: Loaded/Error
     const [loading, setIsLoading] = useState(-1);
     const [upcomingMeetings, setMeetings] = useState<Meeting[]>([]);
+
+    const customerSlug = user.customer_slug || 'default';
+    const isAdmin = user.user_type === 'Admin';
+    // 4 standard cards + 1 admin card = 5 total
+    const totalCards = 4 + (isAdmin ? 1 : 0);
+    // Grid class adjustment for up to 5 cards (col-lg-2.4 is approx col-lg-2 or custom class)
+    const cardGridClass = totalCards > 4 ? "col-lg-2 col-xl-2dot4" : "col-lg-3 col-md-6"; 
 
     const fetchMeetings = async () => {
         setIsLoading(1);
@@ -81,23 +88,24 @@ const DashboardHome = ({ user }: DashboardProps) => {
         notesLink: "#",
     };
 
+    // UPDATED: Scoped navigation function
     const handleJoinMeeting = (roomId: string) => {
-        navigate(`/join?room=${roomId}&user=${user.user_name}`, { state: { initialAudioEnabled: true, initialVideoEnabled: true } });
+        navigate(`/${customerSlug}/join?room=${roomId}&user=${user.user_name}`, { state: { initialAudioEnabled: true, initialVideoEnabled: true } });
     };
 
     return (
         <div className="p-4 p-md-5" style={{ maxWidth: '1400px', margin: '0 auto' }}>
-            <h1 className="fw-light mb-4">Welcome Back {user.user_name}!</h1>
+            <h1 className="fw-light mb-1">Welcome Back {user.user_name}!</h1>
+            <p className="lead text-muted mb-4">You are a **{user.user_type}** for the organization `/{customerSlug}`.</p>
 
             {/* --- 1. Action Panel --- */}
             <div className="row g-4 mb-5">
                 {isLoading ? (
                     <>
-                        {/* 4 skeletons for 4 cards */}
-                        <div className="col-lg-3 col-md-6"><SkeletonCard /></div>
-                        <div className="col-lg-3 col-md-6"><SkeletonCard /></div>
-                        <div className="col-lg-3 col-md-6"><SkeletonCard /></div>
-                        <div className="col-lg-3 col-md-6"><SkeletonCard /></div>
+                        {/* Render Skeletons for the correct number of cards */}
+                        {[...Array(totalCards)].map((_, index) => (
+                            <div key={index} className={cardGridClass}><SkeletonCard /></div>
+                        ))}
                     </>
                 ) : (
                     <>
@@ -105,31 +113,45 @@ const DashboardHome = ({ user }: DashboardProps) => {
                             title="Start/Join a Meeting"
                             icon={FaPlay}
                             buttonText="Start"
-                            onClick={() => navigate("/join")}
+                            onClick={() => navigate(`/${customerSlug}/join`)} // Scoped navigation
                             color="var(--bs-success)"
+                            gridClass={cardGridClass}
                         />
                         <ActionCard
                             title="Manage My Meetings"
                             icon={FaPlus}
                             buttonText="Manage"
-                            onClick={() => navigate("/meetings")}
+                            onClick={() => navigate(`/${customerSlug}/meetings`)} // Scoped navigation
                             color="var(--bs-primary)"
+                            gridClass={cardGridClass}
                         />
                         <ActionCard
                             title="Manage Participants"
                             icon={FaUsers}
                             buttonText="Manage"
-                            onClick={() => navigate("/participants")}
+                            onClick={() => navigate(`/${customerSlug}/participants`)} // Scoped navigation
                             color="var(--bs-info)"
+                            gridClass={cardGridClass}
                         />
-                        {/* NEW BOT MANAGEMENT CARD */}
                         <ActionCard
                             title="Manage Meeting Bots"
                             icon={FiMonitor}
                             buttonText="Configure Bots"
-                            onClick={() => navigate("/bots")}
+                            onClick={() => navigate(`/${customerSlug}/bots`)} // Scoped navigation
                             color="var(--bs-warning)"
+                            gridClass={cardGridClass}
                         />
+                        {/* NEW ADMIN CARD */}
+                        {isAdmin && (
+                            <ActionCard
+                                title="Manage Organization"
+                                icon={RiOrganizationChart}
+                                buttonText="Settings"
+                                onClick={() => navigate(`/${customerSlug}/organization`)} // Scoped navigation
+                                color="var(--bs-danger)"
+                                gridClass={cardGridClass}
+                            />
+                        )}
                     </>
                 )}
             </div>
@@ -172,9 +194,9 @@ const DashboardHome = ({ user }: DashboardProps) => {
 
 // --- Sub-components for Dashboard ---
 
-const ActionCard = ({ title, icon: Icon, buttonText, onClick, color }: any) => (
-    // Updated grid sizing for 4 cards per row on large screens
-    <div className="col-lg-3 col-md-6"> 
+const ActionCard = ({ title, icon: Icon, buttonText, onClick, color, gridClass }: any) => (
+    // Uses the dynamically calculated gridClass for responsive layout
+    <div className={gridClass}> 
         <div className="p-4 rounded-3 shadow-sm h-100 d-flex flex-column justify-content-between" style={{ background: 'var(--bs-secondary-bg)' }}>
             <div>
                 <Icon size={30} style={{ color: color }} className="mb-3" />
