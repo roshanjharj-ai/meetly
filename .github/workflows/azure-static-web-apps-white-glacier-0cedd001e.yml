@@ -33,7 +33,7 @@ jobs:
           # 🛑 IMPORTANT CHANGE: Use app_artifact_location to explicitly point to the final built assets.
           # This prevents the deployment action from including extraneous files (like node_modules) 
           # from the parent 'ui' directory, which causes the "too large" error.
-          app_artifact_location: "ui/dist" # Built app content directory, relative to the repository root.
+          app_artifact_location: "dist" # Built app content directory, relative to the repository root.
           
           # You can remove 'output_location' as 'app_artifact_location' overrides its necessity for deployment.
           # If you must keep it (for other Oryx behaviors), ensure it's not causing file scanning issues.
