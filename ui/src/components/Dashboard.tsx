@@ -1,7 +1,7 @@
 // src/pages/Dashboard/DashboardHome.tsx
 
 import { useEffect, useState } from 'react';
-import { FaCalendarAlt, FaFileAlt, FaPlay, FaPlus, FaUsers } from 'react-icons/fa';
+import { FaCalendarAlt, FaFileAlt, FaHistory, FaPlay, FaPlus, FaUsers } from 'react-icons/fa';
 import { FiMonitor } from 'react-icons/fi'; // New icon for Bot Management
 import { RiOrganizationChart } from 'react-icons/ri'; // New icon for Organization
 import { useNavigate } from 'react-router-dom';
@@ -21,9 +21,9 @@ const SkeletonCard = () => (
         <div className="placeholder-glow d-flex flex-column">
             {/* Placeholder for Icon (to match the mb-3 spacing of the ActionCard icon) */}
             <div className="placeholder mb-3" style={{ width: '30px', height: '30px', borderRadius: '50%' }}></div>
-            
+
             {/* Placeholder for Title */}
-            <div className="placeholder w-75 mb-2" style={{ height: '24px' }}></div> 
+            <div className="placeholder w-75 mb-2" style={{ height: '24px' }}></div>
         </div>
         <div className="placeholder-glow">
             {/* Placeholder for Button */}
@@ -62,7 +62,7 @@ const DashboardHome = ({ user }: DashboardProps) => {
     // 4 standard cards + 1 admin card = 5 total
     const totalCards = 4 + (isAdmin ? 1 : 0);
     // Grid class adjustment for up to 5 cards (col-lg-2.4 is approx col-lg-2 or custom class)
-    const cardGridClass = totalCards > 4 ? "col-lg-2 col-xl-2dot4" : "col-lg-3 col-md-6"; 
+    const cardGridClass = totalCards > 4 ? "col-lg-2 col-xl-2dot4" : "col-lg-3 col-md-6";
 
     const fetchMeetings = async () => {
         setIsLoading(1);
@@ -152,6 +152,16 @@ const DashboardHome = ({ user }: DashboardProps) => {
                                 gridClass={cardGridClass}
                             />
                         )}
+
+                        {/* NEW MEETING HISTORY CARD (All users) */}
+                        <ActionCard
+                            title="View Meeting History"
+                            icon={FaHistory}
+                            buttonText="History"
+                            onClick={() => navigate(`/${customerSlug}/history`)}
+                            color="var(--bs-secondary)" // Neutral color for utility
+                            gridClass={cardGridClass}
+                        />
                     </>
                 )}
             </div>
@@ -196,7 +206,7 @@ const DashboardHome = ({ user }: DashboardProps) => {
 
 const ActionCard = ({ title, icon: Icon, buttonText, onClick, color, gridClass }: any) => (
     // Uses the dynamically calculated gridClass for responsive layout
-    <div className={gridClass}> 
+    <div className={gridClass}>
         <div className="p-4 rounded-3 shadow-sm h-100 d-flex flex-column justify-content-between" style={{ background: 'var(--bs-secondary-bg)' }}>
             <div>
                 <Icon size={30} style={{ color: color }} className="mb-3" />

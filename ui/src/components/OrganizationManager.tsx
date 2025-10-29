@@ -1,7 +1,7 @@
 // src/components/OrganizationManager.tsx
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { FaBuilding, FaEnvelope, FaSave, FaUserCog, FaTrashAlt, FaSpinner, FaCheckCircle, FaExclamationTriangle, FaLink, FaGlobe } from 'react-icons/fa';
+import { FaBuilding, FaEnvelope, FaSave, FaUserCog, FaTrashAlt, FaSpinner, FaCheckCircle, FaExclamationTriangle, FaLink, FaGlobe, FaUsers, FaArrowRight } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 
 // Import API and types
@@ -9,11 +9,11 @@ import { getCustomerDetails, updateCustomerDetails, deleteCustomer } from '../se
 import type { Customer, CustomerUpdate } from '../services/api';
 
 // Import the new Uploader component
-import ImageUploader from './shared/ImageUploader';
+import ImageUploader from './shared/ImageUploader'; // Assuming this path is correct
 
 // Extended type for the component state (Must match the state structure you had before)
 interface CustomerState extends Customer {
-
+    
 }
 
 const OrganizationManager: React.FC = () => {
@@ -25,6 +25,10 @@ const OrganizationManager: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    
+    // Get current slug for internal navigation, safely defaulting if customer is null
+    const currentSlug = customer?.url_slug || 'default';
+
 
     const fetchCustomerDetails = useCallback(async () => {
         setIsLoading(true);
@@ -74,7 +78,7 @@ const OrganizationManager: React.FC = () => {
         }
     };
 
-    // NEW: Handler for the ImageUploader component
+    // Handler for the ImageUploader component
     const handleLogoImageChange = useCallback((base64Image: string | null) => {
         if (customer) {
             setCustomer(prev => (prev ? { ...prev, logo_url: base64Image } : null));
@@ -149,6 +153,10 @@ const OrganizationManager: React.FC = () => {
             setIsLoading(false);
             setError(err.response?.data?.detail || "Failed to delete organization.");
         }
+    };
+    
+    const handleNavigateToUsers = () => {
+        navigate(`/${currentSlug}/members`);
     };
 
 
@@ -240,6 +248,25 @@ const OrganizationManager: React.FC = () => {
                         </div>
                     </div>
                 </div>
+                
+                {/* --- USER MANAGEMENT LINK CARD --- */}
+                <div className="card shadow-sm mb-4 bg-info bg-opacity-10 border-info">
+                    <div className="card-body d-flex justify-content-between align-items-center">
+                        <div className="d-flex align-items-center">
+                            <FaUsers size={30} className="text-info me-3" />
+                            <h3 className="fs-5 fw-semibold mb-0 text-info">Manage Organization Members</h3>
+                        </div>
+                        <button 
+                            type="button" 
+                            className="btn btn-info text-white d-flex align-items-center gap-2"
+                            onClick={handleNavigateToUsers}
+                        >
+                            View Members <FaArrowRight />
+                        </button>
+                    </div>
+                </div>
+                {/* --- END USER MANAGEMENT LINK CARD --- */}
+
 
                 <div className="card shadow-sm mb-4">
                     <div className="card-header bg-primary text-white d-flex align-items-center gap-2">

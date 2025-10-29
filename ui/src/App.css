@@ -424,3 +424,21 @@ body::before {
   font-size: 0.8rem;
   border-top-right-radius: 8px;
 }
+
+.form-control:focus {
+    /* 1. Remove the default focus outline */
+    outline: 0;
+
+    /* 2. Remove the Bootstrap box-shadow that creates the blue glow */
+    box-shadow: none !important; 
+
+    /* OPTIONAL: Add a custom border color to show focus without a glow */
+    border-color: var(--bs-gray-500); 
+}
+
+/* Also target the Bootstrap input group text if it's wrapping the input */
+.input-group:focus-within .form-control:focus,
+.input-group:focus-within .input-group-text {
+    /* Ensures the group focus styling is also suppressed or managed */
+    box-shadow: none !important;
+}

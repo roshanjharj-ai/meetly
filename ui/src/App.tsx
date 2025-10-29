@@ -9,7 +9,7 @@ import "./App.css";
 import CalendarView from './components/calendar/CalendarView';
 import JoinMeeting from './components/meeting/JoinMeeting';
 import Signup from './components/meeting/Signup';
-import StartMeeting from './components/meeting/StartMeeting';
+import Login from './components/Login';
 import MeetingList from './components/meetingList/MeetingList';
 import ParticipantManager from './components/participant/ParticipantManager';
 
@@ -21,6 +21,9 @@ import MeetingHome from './components/meeting/MeetingHome';
 import PreJoinMeeting from './components/meeting/PreJoinMeeting';
 import OrganizationManager from './components/OrganizationManager';
 import UserProfile from './components/UserProfile';
+import UserManager from './components/UserManager';
+import MeetingHistory from './components/meeting/MeetingHistory';
+import ForgotPassword from './components/ForgotPassword';
 
 
 // --- Helper Component 1: ScopedRoutes (The content loader) ---
@@ -48,6 +51,10 @@ const ScopedRoutes = ({ onLogout, user }: { onLogout: () => void, user: any }) =
         {user.user_type === 'Admin' && (
           <Route path="organization" element={<OrganizationManager />} />
         )}
+        {user.user_type === 'Admin' && (
+          <Route path="members" element={<UserManager />} /> // User Management for Admins
+        )}
+        <Route path="history" element={<MeetingHistory user={user} />} />
       </Route>
       {/* Catch-all for paths under the valid slug */}
       <Route path="*" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
@@ -83,13 +90,15 @@ export default function App() {
             {/* Public paths serve the login/signup pages */}
             <Route path="/:customerSlug/prejoin" element={<PreJoinMeeting />} />
             <Route path="/prejoin" element={<PreJoinMeeting />} />
-            <Route path="/:customerSlug/login" element={<StartMeeting />} />
-            <Route path="/login" element={<StartMeeting />} />
+            <Route path="/:customerSlug/login" element={<Login />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/:customerSlug/signup" element={<Signup />} />
             <Route path="/signup" element={<Signup />} />
 
             {/* Default redirect for all unauthenticated users */}
             <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ForgotPassword />} />
           </>
         )}
 

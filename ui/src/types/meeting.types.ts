@@ -14,6 +14,7 @@ export interface Meeting {
     dateTime: string;
     participants: Participant[];
     meetingLink: string;
+    meeting_type: string
 }
 
 // API Request/Response Interfaces

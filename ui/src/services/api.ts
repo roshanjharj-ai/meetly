@@ -13,8 +13,8 @@ const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 // NEW: Function to get the current API base URL, dynamically including the customer slug
 const getBaseUrl = (): string => {
     // 1. Try to get the customer slug from local storage (set during login)
-    const customerSlug = localStorage.getItem('customerSlug'); 
-    
+    const customerSlug = localStorage.getItem('customerSlug');
+
     // 2. If slug exists, prepend it to the API URL
     if (customerSlug) {
         // Assuming RAW_API_BASE_URL is something like http://localhost:8000/api
@@ -24,7 +24,7 @@ const getBaseUrl = (): string => {
         // and rely on the JWT token for customer identification.
         return RAW_API_BASE_URL;
     }
-    
+
     // 3. Fallback to the original base URL (relying on the backend to handle the default customer via JWT)
     return RAW_API_BASE_URL;
 };
@@ -47,7 +47,8 @@ let fallbackMeetings: Meeting[] = [
         agenda: 'Discuss project goals, timelines, and assign initial tasks.',
         dateTime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
         participants: [fallbackParticipants[0], fallbackParticipants[1], fallbackParticipants[4]],
-        meetingLink: 'https://meet.example.com/abc-123'
+        meetingLink: 'https://meet.example.com/abc-123',
+        meeting_type: ""
     },
     {
         id: 'm2',
@@ -55,9 +56,18 @@ let fallbackMeetings: Meeting[] = [
         agenda: 'Review progress from last week and plan for the next.',
         dateTime: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
         participants: [fallbackParticipants[0], fallbackParticipants[1], fallbackParticipants[2], fallbackParticipants[3]],
-        meetingLink: 'https://meet.example.com/def-456'
+        meetingLink: 'https://meet.example.com/def-456',
+        meeting_type: ""
     }
 ];
+
+export interface FetchedUser extends UserProfileUpdate {
+    id: number;
+    email: string;
+    user_name: string;
+    user_type: 'Admin' | 'Member';
+    customer_slug: string;
+}
 
 // ... (Bot Mock Data and Interfaces remain the same)
 export interface BotConfig {
@@ -126,7 +136,7 @@ const fallbackBots: BotConfig[] = [
         pmToolConfig: 'Project-X-ADO-ID',
         currentMeetingId: 'm1',
         currentMeetingSubject: 'Q4 Project Kick-off',
-        recent_completion_rate: 0.95, 
+        recent_completion_rate: 0.95,
         tasks_completed_last_week: 12,
     },
     {
@@ -138,7 +148,7 @@ const fallbackBots: BotConfig[] = [
         pmToolConfig: 'Design-Board-ID-45',
         currentMeetingId: null,
         currentMeetingSubject: null,
-        recent_completion_rate: 0.70, 
+        recent_completion_rate: 0.70,
         tasks_completed_last_week: 3,
     },
     {
@@ -184,7 +194,7 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
         graphMetrics: {
             totalRuns: 500,
             stepVisits: [
-                { step: 'init', count: 500 }, 
+                { step: 'init', count: 500 },
                 { step: 'show_tasks', count: 500 },
                 { step: 'wait_command', count: 480 },
                 { step: 'ask_update', count: 350 },
@@ -196,14 +206,14 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
             stepStatus: { smooth: 420, clarification: 65, blocked: 15 },
         },
     },
-    'b2': { 
-        totalMeetings: 10, 
-        avgDurationMinutes: 50, 
-        tasksCompleted: 5, 
-        tasksCommented: 12, 
-        completionRate: 0.75, 
+    'b2': {
+        totalMeetings: 10,
+        avgDurationMinutes: 50,
+        tasksCompleted: 5,
+        tasksCommented: 12,
+        completionRate: 0.75,
         metrics: [
-             { date: 'Aug', value: 55 }, { date: 'Sep', value: 50 },
+            { date: 'Aug', value: 55 }, { date: 'Sep', value: 50 },
             { date: 'Oct', value: 48 }, { date: 'Nov', value: 45 },
         ],
         taskBreakdown: { completed: 5, commented: 12, created: 2, untouched: 10, total: 29 },
@@ -222,12 +232,12 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
             stepStatus: { smooth: 60, clarification: 15, blocked: 5 },
         },
     },
-    'b3': { 
-        totalMeetings: 0, 
-        avgDurationMinutes: 0, 
-        tasksCompleted: 0, 
-        tasksCommented: 0, 
-        completionRate: 0, 
+    'b3': {
+        totalMeetings: 0,
+        avgDurationMinutes: 0,
+        tasksCompleted: 0,
+        tasksCommented: 0,
+        completionRate: 0,
         metrics: [],
         taskBreakdown: { completed: 0, commented: 0, created: 0, untouched: 0, total: 0 },
         graphMetrics: {
@@ -362,7 +372,7 @@ export const getLLMUsage = async (botId: string): Promise<LLMUsage> => {
     try {
         // NOTE: This endpoint is not fully implemented on the server yet, 
         // so we intentionally throw an error to use the mock data.
-        throw new Error("LLM Usage API not implemented yet."); 
+        throw new Error("LLM Usage API not implemented yet.");
         // const response = await axios.get(`${getBaseUrl()}/bots/${botId}/llm-usage`);
         // return response.data;
     } catch (error) {
@@ -395,22 +405,22 @@ export const getMeetings = async (): Promise<Meeting[]> => {
         }));
     } catch (error) {
         console.warn(`API call failed for getMeetings. Falling back to mock data.`, error);
-        return JSON.parse(JSON.stringify(fallbackMeetings)); 
+        return JSON.parse(JSON.stringify(fallbackMeetings));
     }
 };
 
 interface MeetingFormData {
     subject: string;
     agenda: string;
-    dateTime: string; 
-    participants: Participant[]; 
+    dateTime: string;
+    participants: Participant[];
 }
 
 export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => {
     const payload = {
         subject: data.subject,
         agenda: data.agenda,
-        date_time: data.dateTime, 
+        date_time: data.dateTime,
         participant_ids: data.participants.map(p => parseInt(p.id, 10))
     };
 
@@ -426,7 +436,12 @@ export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => 
         const newMeeting: Meeting = {
             ...data,
             id: uuidv4(),
-            meetingLink: `https://meet.example.com/${uuidv4().substring(0, 8)}`
+            meetingLink: `https://meet.example.com/${uuidv4().substring(0, 8)}`,
+            agenda: "",
+            dateTime: "",
+            meeting_type: "",
+            participants: [],
+            subject: ""
         };
         fallbackMeetings.push(newMeeting);
         return newMeeting;
@@ -435,14 +450,14 @@ export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => 
 
 export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
     const payload = {
-        id: data.id, 
+        id: data.id,
         subject: data.subject,
         agenda: data.agenda,
         date_time: data.dateTime,
         participant_ids: data.participants.map(p => parseInt(p.id, 10))
     };
     try {
-        const response = await axios.put(`${getBaseUrl()}/updateMeeting/${data.id}`, payload); 
+        const response = await axios.put(`${getBaseUrl()}/updateMeeting/${data.id}`, payload);
         return {
             ...response.data,
             participants: response.data.participants || [],
@@ -476,7 +491,7 @@ export const getParticipants = async (): Promise<Participant[]> => {
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getParticipants. Falling back to mock data.`, error);
-        return JSON.parse(JSON.stringify(fallbackParticipants)); 
+        return JSON.parse(JSON.stringify(fallbackParticipants));
     }
 };
 
@@ -547,7 +562,7 @@ export interface Customer {
     logo_url: string | null;
     email_sender_name: string;
     default_meeting_name: string;
-    email_config_json?: string; 
+    email_config_json?: string;
 }
 
 export interface CustomerUpdate {
@@ -585,6 +600,27 @@ export const deleteCustomer = async (): Promise<void> => {
         await axios.delete(`${getBaseUrl()}/customers/me`);
     } catch (error) {
         console.error("Failed to delete customer.", error);
+        throw error;
+    }
+};
+
+export const getUsers = async (): Promise<FetchedUser[]> => {
+    try {
+        // This hits the new Admin-only endpoint
+        const response = await axios.get(`${getBaseUrl()}/users/organization`);
+        return response.data;
+    } catch (error) {
+        console.error("Failed to fetch organization users.", error);
+        throw error;
+    }
+};
+
+export const removeUserFromOrganization = async (userId: number): Promise<void> => {
+    try {
+        // This hits the new Admin-only DELETE endpoint
+        await axios.delete(`${getBaseUrl()}/users/${userId}`);
+    } catch (error) {
+        console.error(`Failed to remove user ${userId}.`, error);
         throw error;
     }
 };
