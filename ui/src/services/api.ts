@@ -106,7 +106,7 @@ const fallbackBots: BotConfig[] = [
         pmToolConfig: 'Project-X-ADO-ID',
         currentMeetingId: 'm1',
         currentMeetingSubject: 'Q4 Project Kick-off',
-        recent_completion_rate: 0.95, 
+        recent_completion_rate: 0.95,
         tasks_completed_last_week: 12,
     },
     {
@@ -118,7 +118,7 @@ const fallbackBots: BotConfig[] = [
         pmToolConfig: 'Design-Board-ID-45',
         currentMeetingId: null,
         currentMeetingSubject: null,
-        recent_completion_rate: 0.70, 
+        recent_completion_rate: 0.70,
         tasks_completed_last_week: 3,
     },
     {
@@ -164,7 +164,7 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
         graphMetrics: {
             totalRuns: 500,
             stepVisits: [
-                { step: 'init', count: 500 }, 
+                { step: 'init', count: 500 },
                 { step: 'show_tasks', count: 500 },
                 { step: 'wait_command', count: 480 },
                 { step: 'ask_update', count: 350 },
@@ -176,14 +176,14 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
             stepStatus: { smooth: 420, clarification: 65, blocked: 15 },
         },
     },
-    'b2': { 
-        totalMeetings: 10, 
-        avgDurationMinutes: 50, 
-        tasksCompleted: 5, 
-        tasksCommented: 12, 
-        completionRate: 0.75, 
+    'b2': {
+        totalMeetings: 10,
+        avgDurationMinutes: 50,
+        tasksCompleted: 5,
+        tasksCommented: 12,
+        completionRate: 0.75,
         metrics: [
-             { date: 'Aug', value: 55 }, { date: 'Sep', value: 50 },
+            { date: 'Aug', value: 55 }, { date: 'Sep', value: 50 },
             { date: 'Oct', value: 48 }, { date: 'Nov', value: 45 },
         ],
         taskBreakdown: { completed: 5, commented: 12, created: 2, untouched: 10, total: 29 },
@@ -202,12 +202,12 @@ const fallbackBotPerformance: { [botId: string]: BotPerformance } = {
             stepStatus: { smooth: 60, clarification: 15, blocked: 5 },
         },
     },
-    'b3': { 
-        totalMeetings: 0, 
-        avgDurationMinutes: 0, 
-        tasksCompleted: 0, 
-        tasksCommented: 0, 
-        completionRate: 0, 
+    'b3': {
+        totalMeetings: 0,
+        avgDurationMinutes: 0,
+        tasksCompleted: 0,
+        tasksCommented: 0,
+        completionRate: 0,
         metrics: [],
         taskBreakdown: { completed: 0, commented: 0, created: 0, untouched: 0, total: 0 },
         graphMetrics: {
@@ -234,6 +234,23 @@ const fallbackLLMUsage: LLMUsage = {
     ]
 };
 
+interface signUpRequest {
+    email: string,
+    password: string,
+    full_name: string,
+    user_name: string,
+    customer_id: string
+}
+
+export const SignUp = async (request: signUpRequest): Promise<string> => {
+    try {
+        const response = await axios.post(`${API_BASE_URL}/signup`, request);
+        return response.data;
+    } catch (error) {
+        console.warn(`API call failed for getBotConfigs. Falling back to mock data.`, error);
+        return JSON.parse(JSON.stringify(fallbackBots));
+    }
+};
 
 export const getBotConfigs = async (): Promise<BotConfig[]> => {
     try {
@@ -324,7 +341,7 @@ export const getLLMUsage = async (botId: string): Promise<LLMUsage> => {
     try {
         // NOTE: This endpoint is not fully implemented on the server yet, 
         // so we intentionally throw an error to use the mock data.
-        throw new Error("LLM Usage API not implemented yet."); 
+        throw new Error("LLM Usage API not implemented yet.");
         // const response = await axios.get(`${API_BASE_URL}/bots/${botId}/llm-usage`);
         // return response.data;
     } catch (error) {
@@ -357,22 +374,22 @@ export const getMeetings = async (): Promise<Meeting[]> => {
         }));
     } catch (error) {
         console.warn(`API call failed for getMeetings. Falling back to mock data.`, error);
-        return JSON.parse(JSON.stringify(fallbackMeetings)); 
+        return JSON.parse(JSON.stringify(fallbackMeetings));
     }
 };
 
 interface MeetingFormData {
     subject: string;
     agenda: string;
-    dateTime: string; 
-    participants: Participant[]; 
+    dateTime: string;
+    participants: Participant[];
 }
 
 export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => {
     const payload = {
         subject: data.subject,
         agenda: data.agenda,
-        date_time: data.dateTime, 
+        date_time: data.dateTime,
         participant_ids: data.participants.map(p => parseInt(p.id, 10))
     };
 
@@ -397,14 +414,14 @@ export const createMeeting = async (data: MeetingFormData): Promise<Meeting> => 
 
 export const updateMeeting = async (data: Meeting): Promise<Meeting> => {
     const payload = {
-        id: data.id, 
+        id: data.id,
         subject: data.subject,
         agenda: data.agenda,
         date_time: data.dateTime,
         participant_ids: data.participants.map(p => parseInt(p.id, 10))
     };
     try {
-        const response = await axios.put(`${API_BASE_URL}/updateMeeting/${data.id}`, payload); 
+        const response = await axios.put(`${API_BASE_URL}/updateMeeting/${data.id}`, payload);
         return {
             ...response.data,
             participants: response.data.participants || [],
@@ -438,7 +455,7 @@ export const getParticipants = async (): Promise<Participant[]> => {
         return response.data;
     } catch (error) {
         console.warn(`API call failed for getParticipants. Falling back to mock data.`, error);
-        return JSON.parse(JSON.stringify(fallbackParticipants)); 
+        return JSON.parse(JSON.stringify(fallbackParticipants));
     }
 };
 
