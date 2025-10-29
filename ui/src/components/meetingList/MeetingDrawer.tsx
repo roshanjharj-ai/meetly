@@ -14,7 +14,7 @@ interface MeetingDrawerProps {
   isLoading: boolean;
 }
 
-const initialFormState = { subject: '', agenda: '', dateTime: '', participants: [] as Participant[] };
+const initialFormState = { meeting_type: "", subject: '', agenda: '', dateTime: '', participants: [] as Participant[] };
 const initialErrors = { subject: '', dateTime: '', participants: '' };
 
 export default function MeetingDrawer({ isOpen, onClose, onSave, meetingToEdit, isLoading }: MeetingDrawerProps) {
@@ -41,6 +41,7 @@ export default function MeetingDrawer({ isOpen, onClose, onSave, meetingToEdit, 
           agenda: meetingToEdit.agenda,
           dateTime: meetingToEdit.dateTime.substring(0, 16), // Format for datetime-local
           participants: meetingToEdit.participants,
+          meeting_type: ""
         });
       } else {
         setFormState(initialFormState);
@@ -74,18 +75,18 @@ export default function MeetingDrawer({ isOpen, onClose, onSave, meetingToEdit, 
   };
 
   const handleAddParticipant = () => {
-      const participantToAdd = allParticipants.find(p => p.id.toString() === selectedParticipantId.toString());
-      if (participantToAdd && !formState.participants.some(p => p.id.toString() === participantToAdd.id)) {
-          setFormState(prev => ({ ...prev, participants: [...prev.participants, participantToAdd] }));
-          setSelectedParticipantId('');
-          setErrors(prev => ({ ...prev, participants: '' }));
-      }
+    const participantToAdd = allParticipants.find(p => p.id.toString() === selectedParticipantId.toString());
+    if (participantToAdd && !formState.participants.some(p => p.id.toString() === participantToAdd.id)) {
+      setFormState(prev => ({ ...prev, participants: [...prev.participants, participantToAdd] }));
+      setSelectedParticipantId('');
+      setErrors(prev => ({ ...prev, participants: '' }));
+    }
   };
 
   const handleRemoveParticipant = (id: string) => {
-      setFormState(prev => ({ ...prev, participants: prev.participants.filter(p => p.id.toString() !== id.toString()) }));
+    setFormState(prev => ({ ...prev, participants: prev.participants.filter(p => p.id.toString() !== id.toString()) }));
   };
-  
+
   const availableParticipants = allParticipants.filter(p => !formState.participants.some(fp => fp.id.toString() === p.id.toString()));
 
   return (
@@ -107,43 +108,43 @@ export default function MeetingDrawer({ isOpen, onClose, onSave, meetingToEdit, 
             <form className="p-4 overflow-auto flex-grow-1" onSubmit={handleSubmit} noValidate>
               <div className="mb-3">
                 <label htmlFor="subject" className="form-label">Subject</label>
-                 <div className="input-group">
-                   <span className="input-group-text"><FiFileText /></span>
-                   <input type="text" className={`form-control ${errors.subject && 'is-invalid'}`} id="subject" name="subject" value={formState.subject} onChange={handleChange} required />
-                   {errors.subject && <div className="invalid-feedback">{errors.subject}</div>}
-                 </div>
+                <div className="input-group">
+                  <span className="input-group-text"><FiFileText /></span>
+                  <input type="text" className={`form-control ${errors.subject && 'is-invalid'}`} id="subject" name="subject" value={formState.subject} onChange={handleChange} required />
+                  {errors.subject && <div className="invalid-feedback">{errors.subject}</div>}
+                </div>
               </div>
               <div className="mb-3">
                 <label htmlFor="dateTime" className="form-label">Date & Time</label>
-                 <div className="input-group">
-                   <span className="input-group-text"><FiCalendar /></span>
-                   <input type="datetime-local" className={`form-control ${errors.dateTime && 'is-invalid'}`} id="dateTime" name="dateTime" value={formState.dateTime} onChange={handleChange} required />
-                   {errors.dateTime && <div className="invalid-feedback">{errors.dateTime}</div>}
-                 </div>
+                <div className="input-group">
+                  <span className="input-group-text"><FiCalendar /></span>
+                  <input type="datetime-local" className={`form-control ${errors.dateTime && 'is-invalid'}`} id="dateTime" name="dateTime" value={formState.dateTime} onChange={handleChange} required />
+                  {errors.dateTime && <div className="invalid-feedback">{errors.dateTime}</div>}
+                </div>
               </div>
               <div className="mb-3">
-                 <label htmlFor="agenda" className="form-label">Agenda (Optional)</label>
-                 <textarea className="form-control" id="agenda" name="agenda" rows={4} value={formState.agenda} onChange={handleChange}></textarea>
+                <label htmlFor="agenda" className="form-label">Agenda (Optional)</label>
+                <textarea className="form-control" id="agenda" name="agenda" rows={4} value={formState.agenda} onChange={handleChange}></textarea>
               </div>
               <div className="mb-3">
-                  <label className="form-label">Participants</label>
-                   <div className="input-group">
-                       <span className="input-group-text"><FiUsers /></span>
-                       <select className="form-select" value={selectedParticipantId} onChange={e => setSelectedParticipantId(e.target.value)}>
-                           <option value="">-- Select a participant to add --</option>
-                           {availableParticipants.map(p => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
-                       </select>
-                       <button className="btn btn-outline-secondary" type="button" onClick={handleAddParticipant} disabled={!selectedParticipantId}>Add</button>
-                   </div>
-                   {errors.participants && <div className="d-block invalid-feedback text-danger small mt-1">{errors.participants}</div>}
-                   <div className="mt-2 d-flex flex-wrap gap-2">
-                       {formState.participants.map(p => (
-                           <span key={p.id} className="badge bg-secondary d-flex align-items-center gap-2 p-2">
-                               {p.name}
-                               <button type="button" className="btn-close btn-close-white" style={{fontSize: '0.6rem'}} onClick={() => handleRemoveParticipant(p.id.toString())}></button>
-                           </span>
-                       ))}
-                   </div>
+                <label className="form-label">Participants</label>
+                <div className="input-group">
+                  <span className="input-group-text"><FiUsers /></span>
+                  <select className="form-select" value={selectedParticipantId} onChange={e => setSelectedParticipantId(e.target.value)}>
+                    <option value="">-- Select a participant to add --</option>
+                    {availableParticipants.map(p => <option key={p.id} value={p.id}>{p.name} ({p.email})</option>)}
+                  </select>
+                  <button className="btn btn-outline-secondary" type="button" onClick={handleAddParticipant} disabled={!selectedParticipantId}>Add</button>
+                </div>
+                {errors.participants && <div className="d-block invalid-feedback text-danger small mt-1">{errors.participants}</div>}
+                <div className="mt-2 d-flex flex-wrap gap-2">
+                  {formState.participants.map(p => (
+                    <span key={p.id} className="badge bg-secondary d-flex align-items-center gap-2 p-2">
+                      {p.name}
+                      <button type="button" className="btn-close btn-close-white" style={{ fontSize: '0.6rem' }} onClick={() => handleRemoveParticipant(p.id.toString())}></button>
+                    </span>
+                  ))}
+                </div>
               </div>
               {meetingToEdit && (
                 <div className="mb-3">

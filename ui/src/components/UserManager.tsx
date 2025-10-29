@@ -2,13 +2,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaSearch, FaSpinner, FaUserMinus, FaUsers } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
 import useMediaQuery from '../hooks/useMediaQuery';
 import { getUsers, removeUserFromOrganization, type FetchedUser } from '../services/api'; // NEW API imports
 
 
 const UserManager: React.FC = () => {
-    const navigate = useNavigate();
     const isMobile = useMediaQuery("(max-width: 767.98px)");
     
     const [users, setUsers] = useState<FetchedUser[]>([]);

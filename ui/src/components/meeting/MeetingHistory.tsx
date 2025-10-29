@@ -2,8 +2,6 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { FaCalendarCheck, FaClock, FaCommentDots, FaHistory, FaSpinner } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
-import useMediaQuery from '../../hooks/useMediaQuery';
 import { getMeetings } from '../../services/api'; // Using existing meetings API
 import type { Meeting } from '../../types/meeting.types';
 import { formatDate } from '../../utils/Utilities';
@@ -19,9 +17,7 @@ interface MeetingHistoryEntry extends Meeting {
     tasks_created: number; // For performance metrics
 }
 
-const MeetingHistory: React.FC<MeetingHistoryProps> = ({ user }) => {
-    const navigate = useNavigate();
-    const isMobile = useMediaQuery("(max-width: 767.98px)");
+const MeetingHistory: React.FC<MeetingHistoryProps> = () => {    
 
     const [history, setHistory] = useState<MeetingHistoryEntry[]>([]);
     const [isLoading, setIsLoading] = useState(true);

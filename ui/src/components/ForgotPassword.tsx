@@ -1,14 +1,14 @@
 // src/pages/ForgotPassword.tsx
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { FaSpinner, FaMailBulk, FaLock, FaArrowLeft, FaExclamationTriangle, FaCheckCircle } from 'react-icons/fa';
-import { FiMail, FiLock } from 'react-icons/fi';
 import axios from 'axios';
+import { motion } from 'framer-motion';
+import React, { useState } from 'react';
+import { FaArrowLeft, FaCheckCircle, FaExclamationTriangle, FaLock, FaMailBulk, FaSpinner } from 'react-icons/fa';
+import { FiLock, FiMail } from 'react-icons/fi';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import aiLogo from "../assets/ai-meet-icon.png";
 import useMediaQuery from '../hooks/useMediaQuery';
 import SplitScreen from './meeting/SplitScreen'; // Assuming SplitScreen is available
-import aiLogo from "../assets/ai-meet-icon.png";
 
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
