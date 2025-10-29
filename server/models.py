@@ -146,3 +146,14 @@ class BotActivity(Base):
     activity_type = Column(String(50), nullable=False)
     content = Column(Text, nullable=False)
     task_status = Column(String(50), nullable=True)
+    
+    
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    token = Column(String(64), unique=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+
+    user = relationship("User")

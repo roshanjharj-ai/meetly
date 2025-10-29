@@ -1,8 +1,8 @@
 # main.py
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta, datetime
 from typing import List, Dict, Any, Optional
 import json
@@ -65,7 +65,7 @@ async def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth
 @app.post("/api/signup", response_model=schemas.User)
 def create_user(
     user: schemas.UserCreate, 
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks,  # MOVED BEFORE DEFAULT ARGUMENT
     db: Session = Depends(get_db)
 ):
     db_user = crud.get_user_by_email_and_customer(db, user.customer_id, user.email)
@@ -175,6 +175,87 @@ async def update_user_profile(
     updated_user = crud.update_user(db=db, user=current_user, update_data=update_data)
     return enrich_user_response(db, updated_user)
 
+
+@app.get("/api/users/organization", response_model=List[schemas.User])
+async def get_organization_users(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.user_type != 'Admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Admins can view the organization user list.")
+    
+    users = crud.get_all_users_by_customer(db, current_user.customer_id)
+    # Enrich and return user list
+    return [enrich_user_response(db, u) for u in users]
+
+@app.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_organization_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.user_type != 'Admin':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only Admins can remove users.")
+        
+    # Prevent Admins from removing themselves (unless they are the last one, which requires extra logic)
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot remove yourself.")
+        
+    user_to_delete = crud.remove_user_by_id(db, current_user.customer_id, user_id)
+    
+    if not user_to_delete:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found in this organization.")
+        
+    return
+
+@app.post("/api/auth/forgot-password", status_code=status.HTTP_200_OK)
+async def forgot_password_request(
+    request: schemas.PasswordResetRequest,
+    background_tasks: BackgroundTasks, # MOVED BEFORE DEFAULT ARGUMENT
+    db: Session = Depends(get_db)
+):
+    # Find user across all customers (if multiple customers share the login page)
+    user = crud.get_user_by_email(db, email=request.email)
+    
+    if user and user.provider == 'local':
+        # 1. Create unique reset token
+        reset_token = crud.create_reset_token(db, user.id)
+        
+        # 2. Construct the reset URL (Frontend must handle the /reset-password route)
+        # NOTE: You need to configure the BASE_URL of your frontend here!
+        # Assuming frontend URL: http://localhost:5173
+        reset_url = f"http://localhost:5173/reset-password?token={reset_token.token}"
+        
+        # 3. Send email asynchronously
+        background_tasks.add_task(
+            email_service.send_password_reset_email,
+            user.email,
+            user.full_name or user.user_name,
+            reset_url
+        )
+    
+    # Always return a generic success message for security, regardless of whether the email exists.
+    return {"message": "If a matching account was found, a password reset email has been sent."}
+
+@app.post("/api/auth/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password_confirm(
+    request: schemas.PasswordResetConfirm,
+    db: Session = Depends(get_db)
+):
+    # 1. Validate token and get user
+    user = crud.get_user_by_reset_token(db, request.token)
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+        
+    # 2. Update user's password
+    crud.update_user_password(db, user.id, request.new_password)
+    
+    # 3. Invalidate the used token
+    crud.invalidate_reset_token(db, request.token)
+    
+    return {"message": "Password successfully updated."}
+
 # --- NEW: Customer Management Routes (Admin Only) ---
 @app.get("/api/customers/me", response_model=schemas.Customer)
 async def get_customer_details(
@@ -210,7 +291,7 @@ def get_meetings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
 @app.post("/api/createMeeting", response_model=schemas.Meeting)
 def create_meeting(
     meeting: schemas.MeetingCreate, 
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks, # MOVED BEFORE DEFAULT ARGUMENT
     db: Session = Depends(get_db), 
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
@@ -231,7 +312,7 @@ def create_meeting(
 def update_meeting_route(
     meeting_id: int,
     meeting_update: schemas.MeetingCreate,
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks, # MOVED BEFORE DEFAULT ARGUMENT
     db: Session = Depends(get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
@@ -304,17 +385,17 @@ def delete_participant_route(
 # ADDED: GET BOT CONFIGS
 @app.get("/api/bots/configs", response_model=List[schemas.BotConfig])
 def get_bot_configs_route(db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
-    return crud.get_bot_configs(db)
+    return crud.get_bot_configs(db, current_user.customer_id)
 
 # ADDED: CREATE BOT CONFIG
 @app.post("/api/bots/create", response_model=schemas.BotConfig)
 def create_bot_config_route(bot: schemas.BotConfigCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
-    return crud.create_bot_config(db=db, bot=bot, user_id=current_user.id)
+    return crud.create_bot_config(db=db, customer_id=current_user.customer_id, bot=bot, user_id=current_user.id)
 
 # ADDED: UPDATE BOT CONFIG
 @app.put("/api/bots/update/{bot_id}", response_model=schemas.BotConfig)
 def update_bot_config_route(bot_id: int, bot_update: schemas.BotConfigUpdate, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
-    db_bot = crud.update_bot_config(db, bot_id=bot_id, bot_update=bot_update)
+    db_bot = crud.update_bot_config(db, customer_id=current_user.customer_id, bot_id=bot_id, bot_update=bot_update)
     if db_bot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
     return db_bot
@@ -322,7 +403,7 @@ def update_bot_config_route(bot_id: int, bot_update: schemas.BotConfigUpdate, db
 # ADDED: DELETE BOT CONFIG
 @app.delete("/api/bots/delete/{bot_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bot_config_route(bot_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
-    db_bot = crud.delete_bot_config(db, bot_id=bot_id)
+    db_bot = crud.delete_bot_config(db, customer_id=current_user.customer_id, bot_id=bot_id)
     if db_bot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
     return
@@ -333,9 +414,6 @@ def get_bot_activities_route(bot_id: int, db: Session = Depends(get_db), current
     """Retrieves recent activities (transcripts and actions) for a specific bot."""
     activities = crud.get_bot_activities(db, bot_id)
     if not activities:
-        # NOTE: Returning a 200 OK with an empty list is fine; 
-        # the frontend will then need to rely on its mock data if this is intended.
-        # But if the table has no entries, this is the correct server response.
         return []
     return activities
 
@@ -355,7 +433,7 @@ def barge_into_meeting_route(
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
     room_id = request.get("meetingId")
-    db_bot = crud.get_bot_by_id(db, bot_id)
+    db_bot = crud.get_bot_by_id_and_customer(db, current_user.customer_id, bot_id) # Using customer-scoped getter
     
     if not db_bot or not room_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot or Meeting ID not found")

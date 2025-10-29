@@ -9,6 +9,10 @@ from typing import List, Optional
 import json
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
+import secrets
+from datetime import datetime, timedelta
+
+TOKEN_EXPIRY_MINUTES = 60
 
 # --- Helper: Get Customer by Slug (NEW) ---
 def get_customer_by_slug(db: Session, url_slug: str):
@@ -403,3 +407,70 @@ def delete_customer(db: Session, customer_id: int):
         db.delete(db_customer)
         db.commit()
     return db_customer
+
+
+def get_all_users_by_customer(db: Session, customer_id: int):
+    """Retrieves all users belonging to a specific customer."""
+    return db.query(models.User).filter(models.User.customer_id == customer_id).all()
+
+def remove_user_by_id(db: Session, customer_id: int, user_id: int):
+    """Removes a user from the organization by deleting the user record."""
+    db_user = db.query(models.User).filter(
+        models.User.customer_id == customer_id,
+        models.User.id == user_id
+    ).first()
+    
+    if db_user:
+        # Note: Cascade delete handles linked bot configs/other tables.
+        db.delete(db_user)
+        db.commit()
+    return db_user
+
+
+def create_reset_token(db: Session, user_id: int):
+    # Invalidate existing tokens for the user
+    db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.user_id == user_id
+    ).delete()
+    
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRY_MINUTES)
+
+    db_token = models.PasswordResetToken(
+        user_id=user_id,
+        token=token,
+        expires_at=expires_at
+    )
+    db.add(db_token)
+    db.commit()
+    db.refresh(db_token)
+    return db_token
+
+def get_user_by_reset_token(db: Session, token: str):
+    now = datetime.now(timezone.utc)
+    db_token = db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.token == token,
+        models.PasswordResetToken.expires_at > now
+    ).first()
+    
+    if db_token:
+        # Return the associated user object
+        return db_token.user
+    return None
+
+def invalidate_reset_token(db: Session, token: str):
+    db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.token == token
+    ).delete()
+    db.commit()
+
+def update_user_password(db: Session, user_id: int, new_password: str):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if db_user:
+        truncated_password = new_password[:72]
+        db_user.hashed_password = auth.get_password_hash(truncated_password)
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return True
+    return False
