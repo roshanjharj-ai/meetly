@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
-import { FiCalendar, FiClock, FiEdit, FiPlus, FiTrash2, FiUsers, FiX } from 'react-icons/fi';
+import { useCallback, useEffect, useState } from 'react';
+import { FaHistory } from 'react-icons/fa';
+import { FiCalendar, FiClock, FiEdit, FiPlus, FiTrash2, FiUsers, FiX } from 'react-icons/fi'; // Added FiList, FiHistory
+import { useNavigate } from 'react-router-dom'; // Added useNavigate
 import useMediaQuery from '../../hooks/useMediaQuery';
 import { createMeeting, deleteMeeting, getMeetings, updateMeeting } from '../../services/api';
 import type { CreateMeetingRequest, Meeting } from '../../types/meeting.types';
@@ -29,7 +31,7 @@ const ParticipantsPanel = ({ meeting, onClose }: { meeting: Meeting | undefined;
     )
 }
 
-// --- NEW SKELETON COMPONENT ---
+// --- NEW SKELETON COMPONENT (Retained) ---
 const MeetingCardSkeleton = () => (
     <div className="card border-secondary placeholder-glow">
         <div className="card-body">
@@ -85,6 +87,7 @@ const MeetingListSkeleton = () => (
 
 
 export default function MeetingList() {
+  const navigate = useNavigate();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   // Use state to track loading: true/false
   const [isLoading, setIsLoading] = useState(true);
@@ -95,24 +98,31 @@ export default function MeetingList() {
   const [activeParticipantsPanel, setActiveParticipantsPanel] = useState<string | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
   
-  const fetchMeetings = async () => {
+  // Retrieve the customer slug from local storage for scoped routing
+  const customerSlug = localStorage.getItem('customerSlug') || 'default';
+
+
+  const fetchMeetings = useCallback(async () => {
     setIsLoading(true);
     try {
       // Adding a small delay to clearly show the skeleton effect
       await new Promise(resolve => setTimeout(resolve, 500)); 
 
       const data = await getMeetings();
-      setMeetings(data.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()));
+      // Only show meetings scheduled for the future or happening now
+      const upcoming = data.filter(m => new Date(m.dateTime).getTime() >= Date.now());
+      setMeetings(upcoming.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()));
     } catch (error) {
       console.error("Failed to fetch meetings", error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []); // useCallback dependency list is empty as it only depends on external functions
 
   useEffect(() => {
     fetchMeetings();
-  }, []);
+  }, [fetchMeetings]); // Use fetchMeetings as a dependency
+
   
   const handleAddClick = () => {
     setMeetingToEdit(null);
@@ -132,7 +142,7 @@ export default function MeetingList() {
         } else {
             await createMeeting(data);
         }
-        await fetchMeetings();
+        await fetchMeetings(); // Refresh list after save
         setIsDrawerOpen(false);
     } catch (error) {
         console.error("Failed to save meeting", error);
@@ -160,6 +170,16 @@ export default function MeetingList() {
       });
   };
 
+  // --- NEW NAVIGATION HANDLERS ---
+  const handleNavigateToParticipants = () => {
+      navigate(`/${customerSlug}/participants`);
+  };
+
+  const handleNavigateToHistory = () => {
+      navigate(`/${customerSlug}/history`);
+  };
+  // ---------------------------------
+
   // Renders the skeleton during loading
   if (isLoading) return <div className="d-flex" style={{ height: "100%" }}><MeetingListSkeleton /></div>; 
   
@@ -170,10 +190,37 @@ export default function MeetingList() {
       <main className="flex-grow-1 p-3 p-md-4 overflow-auto">
         <div className="d-flex flex-column flex-md-row justify-content-md-between align-items-md-center mb-4 gap-3">
           <div className="d-flex align-items-center gap-3">
-             {/* <button className="btn btn-outline-secondary d-inline-flex align-items-center" onClick={onBack}><FiArrowLeft/></button> */}
-             <h2 className="mb-0 d-flex align-items-center gap-2"><FiCalendar /> My Meetings</h2>
+             <h2 className="mb-0 d-flex align-items-center gap-2"><FiCalendar /> Upcoming Meetings ({meetings.length})</h2>
           </div>
-          <button className="btn btn-primary d-flex align-items-center justify-content-center gap-2" onClick={handleAddClick}><FiPlus /> New Meeting</button>
+          
+          {/* --- NEW ACTION BUTTONS GROUP --- */}
+          <div className="d-flex gap-2 flex-wrap justify-content-end">
+              
+              <button 
+                  className="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2" 
+                  onClick={handleNavigateToParticipants}
+                  title="Manage Participants"
+              >
+                  <FiUsers /> {!isMobile && "Participants"}
+              </button>
+              
+              <button 
+                  className="btn btn-outline-secondary d-flex align-items-center justify-content-center gap-2" 
+                  onClick={handleNavigateToHistory}
+                  title="View Meeting History"
+              >
+                  <FaHistory /> {!isMobile && "History"}
+              </button>
+              
+              <button 
+                  className="btn btn-primary d-flex align-items-center justify-content-center gap-2" 
+                  onClick={handleAddClick}
+              >
+                  <FiPlus /> New Meeting
+              </button>
+          </div>
+          {/* --- END ACTION BUTTONS GROUP --- */}
+          
         </div>
         <div className="vstack gap-3">
           {meetings.length === 0 ? ( <p className="text-center text-body-secondary mt-5">You have no upcoming meetings.</p> ) : (
@@ -183,8 +230,8 @@ export default function MeetingList() {
                   <div className="d-flex justify-content-between">
                     <h5 className="card-title text-primary">{meeting.subject}</h5>
                     <div className="d-flex gap-2">
-                       <button className="btn btn-sm btn-outline-secondary" onClick={() => handleEditClick(meeting)}><FiEdit/></button>
-                       <button className="btn btn-sm btn-outline-danger" onClick={() => setMeetingToDelete(meeting)}><FiTrash2/></button>
+                       <button className="btn btn-sm btn-outline-secondary" onClick={() => handleEditClick(meeting)} title="Edit Meeting"><FiEdit/></button>
+                       <button className="btn btn-sm btn-outline-danger" onClick={() => setMeetingToDelete(meeting)} title="Delete Meeting"><FiTrash2/></button>
                     </div>
                   </div>
                   <h6 className="card-subtitle mb-2 text-body-secondary d-flex align-items-center gap-2 small"><FiClock /> {formatDate(meeting.dateTime)}</h6>

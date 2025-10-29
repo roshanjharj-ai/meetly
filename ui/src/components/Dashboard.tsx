@@ -1,7 +1,7 @@
 // src/pages/Dashboard/DashboardHome.tsx
 
 import { useEffect, useState } from 'react';
-import { FaCalendarAlt, FaFileAlt, FaHistory, FaPlay, FaPlus, FaUsers } from 'react-icons/fa';
+import { FaCalendarAlt, FaFileAlt, FaPlay, FaPlus } from 'react-icons/fa';
 import { FiMonitor } from 'react-icons/fi'; // New icon for Bot Management
 import { RiOrganizationChart } from 'react-icons/ri'; // New icon for Organization
 import { useNavigate } from 'react-router-dom';
@@ -126,14 +126,6 @@ const DashboardHome = ({ user }: DashboardProps) => {
                             gridClass={cardGridClass}
                         />
                         <ActionCard
-                            title="Manage Participants"
-                            icon={FaUsers}
-                            buttonText="Manage"
-                            onClick={() => navigate(`/${customerSlug}/participants`)} // Scoped navigation
-                            color="var(--bs-info)"
-                            gridClass={cardGridClass}
-                        />
-                        <ActionCard
                             title="Manage Meeting Bots"
                             icon={FiMonitor}
                             buttonText="Configure Bots"
@@ -152,16 +144,6 @@ const DashboardHome = ({ user }: DashboardProps) => {
                                 gridClass={cardGridClass}
                             />
                         )}
-
-                        {/* NEW MEETING HISTORY CARD (All users) */}
-                        <ActionCard
-                            title="View Meeting History"
-                            icon={FaHistory}
-                            buttonText="History"
-                            onClick={() => navigate(`/${customerSlug}/history`)}
-                            color="var(--bs-secondary)" // Neutral color for utility
-                            gridClass={cardGridClass}
-                        />
                     </>
                 )}
             </div>
