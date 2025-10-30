@@ -111,6 +111,8 @@ class WebRTCManager {
   iceConfig: RTCConfiguration = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" }, 
+      { urls: "stun:stun2.l.google.com:19302" },
       {
         urls: "turn:relay.metered.ca:80",
         username: "openai",
@@ -698,10 +700,11 @@ class WebRTCManager {
           if (pc._iceRestartTimer) window.clearTimeout(pc._iceRestartTimer);
           pc._iceRestartTimer = window.setTimeout(() => {
             try {
-              if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+              // 🔥 FIX: Removed internal state check to make ICE restart more aggressive
+              // if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
                 this.log("?? Attempting ICE restart for", targetId);
                 try { (pc as any).restartIce?.(); } catch (err) { this.log('restartIce failed', err); }
-              }
+              // }
             } catch (err) { this.log('ice restart debounce error', err); }
           }, 2500);
         } else {
@@ -1141,7 +1144,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       }
       
       // Assuming API URL structure based on main.py endpoint
-      const API_BASE_URL = signalingBase?.replace('/ws', '/api') || import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+      const API_BASE_URL = signalingBase?.replace('/ws', '/api') || import.meta.env.VITE_API_URL || "https://synapt-server-ebcjejbjh6guhbau.canadacentral-01.azurewebsites.net/api";
       const historyUrl = `${API_BASE_URL.replace(/\/+$/, "")}/meetings/${room}/chat/history`;
       
       const response = await fetch(historyUrl, {

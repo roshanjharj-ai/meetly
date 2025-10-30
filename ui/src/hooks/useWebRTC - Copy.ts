@@ -108,9 +108,12 @@ class WebRTCManager {
   onSpeakerUpdate?: (speakers: Record<string, boolean>) => void;
   onLocalStream?: (s: MediaStream | null) => void;
 
+  // 🔥 FIX: Added more STUN servers for connection resilience
   iceConfig: RTCConfiguration = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" }, 
+      { urls: "stun:stun2.l.google.com:19302" },
       {
         urls: "turn:relay.metered.ca:80",
         username: "openai",
@@ -464,7 +467,7 @@ class WebRTCManager {
       } else if (action === "answer") {
         this.log("✅ Received answer from", from);
         
-        // --- 🔥 FIX: Reset _ignoreOffer when receiving a successful answer ---
+        // 🔥 FIX: Reset _ignoreOffer when receiving a successful answer 
         if (pc._ignoreOffer && pc.signalingState === "have-local-offer") {
             this.log(`🔥 Resetting _ignoreOffer flag for ${from} after receiving answer.`);
             pc._ignoreOffer = false;
@@ -698,10 +701,11 @@ class WebRTCManager {
           if (pc._iceRestartTimer) window.clearTimeout(pc._iceRestartTimer);
           pc._iceRestartTimer = window.setTimeout(() => {
             try {
-              if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+              // 🔥 FIX: Removed internal state check to make ICE restart more aggressive
+              // if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
                 this.log("?? Attempting ICE restart for", targetId);
                 try { (pc as any).restartIce?.(); } catch (err) { this.log('restartIce failed', err); }
-              }
+              // }
             } catch (err) { this.log('ice restart debounce error', err); }
           }, 2500);
         } else {
