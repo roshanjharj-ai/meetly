@@ -15,7 +15,26 @@ from sqlalchemy.exc import IntegrityError
 
 TOKEN_EXPIRY_MINUTES = 60
 
-# --- Helper: Get Customer by Slug (NEW) ---
+# --- Utility: Enrich User Response (Updated with License Status) ---
+def enrich_user_response(db: Session, user: models.User) -> schemas.User:
+    customer = get_customer_by_id(db, user.customer_id)
+    
+    enriched_user = schemas.User.model_validate(user)
+    
+    if customer:
+        enriched_user.customer_slug = customer.url_slug
+        
+        # --- FIX: Set license_status using the check_license_active utility ---
+        check_license_active(db, user.customer_id) 
+        
+        # Re-fetch license data after potential update (to get latest status string)
+        license_data = get_license_by_customer(db, user.customer_id) 
+        
+        enriched_user.license_status = license_data.status if license_data else "NOT_LICENSED"
+    
+    return enriched_user
+
+# --- Helper: Get Customer by Slug ---
 def get_customer_by_slug(db: Session, url_slug: str):
     return db.query(models.Customer).filter(models.Customer.url_slug == url_slug).first()
 
@@ -28,7 +47,6 @@ def get_user_by_email_and_customer(db: Session, customer_id: int, email: str):
     ).first()
 
 def get_user_by_email(db: Session, email: str):
-    # Used for global login (pre-auth), returns user object which contains customer_id
     return db.query(models.User).filter(models.User.email == email).first()
 
 def create_user(db: Session, user: schemas.UserCreate):
@@ -41,7 +59,7 @@ def create_user(db: Session, user: schemas.UserCreate):
             hashed_password=hashed_password, 
             full_name=user.full_name, 
             user_name=user.user_name,
-            user_type='Member' # Default to Member, Admin set manually or via specific process
+            user_type='Member'
         )
         db.add(db_user)
         db.commit()
@@ -53,7 +71,6 @@ def create_user(db: Session, user: schemas.UserCreate):
 
 
 def update_user(db: Session, user: models.User, update_data: schemas.UserUpdate):
-    # The 'user' object is already scoped to the customer via get_current_user
     update_dict = update_data.model_dump(exclude_unset=True)
     
     for key, value in update_dict.items():
@@ -63,31 +80,6 @@ def update_user(db: Session, user: models.User, update_data: schemas.UserUpdate)
     db.commit()
     db.refresh(user)
     return user
-
-
-def enrich_user_response(db: Session, user: models.User) -> schemas.User:
-    # Use the customer getter which already eager-loads the license
-    customer = get_customer_by_id(db, user.customer_id)
-    
-    enriched_user = schemas.User.model_validate(user)
-    
-    if customer:
-        enriched_user.customer_slug = customer.url_slug
-        
-        # --- FIX: Set license_status ---
-        if customer.license:
-            # We must explicitly call the license check to update the status if expired
-            is_active = check_license_active(db, user.customer_id) 
-            
-            # Re-fetch license data after potential update
-            license_data = customer.license 
-            
-            enriched_user.license_status = license_data.status
-        else:
-            # Default behavior if no license record exists (should return "False" if active check is called)
-            enriched_user.license_status = "NOT_LICENSED"
-    
-    return enriched_user
 
 
 # --- Meeting CRUD (Customer-Scoped) ---
@@ -528,6 +520,7 @@ def update_bot_status_by_id_global(db: Session, bot_id: int, new_status: str):
 def transfer_user_to_customer(db: Session, user_id: int, new_customer_id: int):
     """
     Transfers a user's customer_id and resets their role to 'Member'.
+    Raises IntegrityError if user's email already exists in the new customer.
     """
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     
@@ -540,7 +533,7 @@ def transfer_user_to_customer(db: Session, user_id: int, new_customer_id: int):
     # 2. Reset the user's role to the lowest level (Member) in the new organization
     db_user.user_type = 'Member'
     
-    # 3. Commit (IntegrityError will be raised if email conflict exists in main.py)
+    # 3. Commit (relying on DB constraint to catch email conflicts)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)

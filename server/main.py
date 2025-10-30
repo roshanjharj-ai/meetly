@@ -1,11 +1,11 @@
 # main.py
-from sqlite3 import IntegrityError
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta, datetime, timezone
 from typing import List, Dict, Any, Optional
+from sqlalchemy.exc import IntegrityError
 import json
 import os
 import asyncio
@@ -156,7 +156,7 @@ async def reset_password_confirm(
     
     return {"message": "Password successfully updated."}
 
-# Utility to enrich User schema with customer_slug before sending to frontend
+# Utility to enrich User schema with customer_slug and license status
 def enrich_user_response(db: Session, user: models.User) -> schemas.User:
     customer = crud.get_customer_by_id(db, user.customer_id)
     
@@ -166,7 +166,7 @@ def enrich_user_response(db: Session, user: models.User) -> schemas.User:
         enriched_user.customer_slug = customer.url_slug
         
         # --- FIX: Set license_status using the check_license_active utility ---
-        is_license_active = crud.check_license_active(db, user.customer_id) 
+        crud.check_license_active(db, user.customer_id) 
         
         # Re-fetch license data after potential update (to get latest status string)
         license_data = crud.get_license_by_customer(db, user.customer_id) 
@@ -222,9 +222,43 @@ async def delete_organization_user(
         
     return
 
+@app.put("/api/users/transfer", response_model=schemas.User)
+async def super_admin_transfer_user(
+    transfer_request: schemas.UserTransfer,
+    current_super_admin: models.User = Depends(get_current_super_admin),
+    db: Session = Depends(get_db)
+):
+    """Transfers a user from their current organization to a new one."""
+    
+    if transfer_request.user_id == current_super_admin.id:
+        raise HTTPException(status_code=400, detail="Cannot transfer the active SuperAdmin account.")
+        
+    try:
+        updated_user = crud.transfer_user_to_customer(
+            db, 
+            transfer_request.user_id, 
+            transfer_request.new_customer_id
+        )
+        
+        if not updated_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+            
+        return enrich_user_response(db, updated_user)
+        
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, 
+            detail="Conflict: A user with that email already exists in the target organization."
+        )
+    except Exception as e:
+        print(f"Transfer error: {e}")
+        raise HTTPException(status_code=500, detail="An unexpected error occurred during transfer.")
+
+
 # --- NEW: Customer Management Routes (Admin Only) ---
 
-@app.get("/api/customers/slug/{url_slug}", response_model=schemas.Customer) # Changed response_model to schemas.Customer
+@app.get("/api/customers/slug/{url_slug}", response_model=schemas.CustomerBase)
 async def get_customer_by_slug_route(
     url_slug: str,
     db: Session = Depends(get_db)
@@ -239,10 +273,8 @@ async def get_customer_by_slug_route(
             detail=f"Organization not found for slug: {url_slug}"
         )
     
-    # Use the full Customer schema which correctly includes 'id' and 'created_at' 
-    # and has from_attributes=True defined.
-    # Pydantic V2 strongly prefers .model_validate(obj, from_attributes=True)
-    return schemas.Customer.model_validate(customer, from_attributes=True)
+    # Use CustomerBase schema for public, unscoped data
+    return schemas.CustomerBase.model_validate(customer, from_attributes=True)
 
 @app.get("/api/customers/me", response_model=schemas.Customer)
 async def get_customer_details(
@@ -311,7 +343,7 @@ async def super_admin_get_customer_users(
     current_super_admin: models.User = Depends(get_current_super_admin),
     db: Session = Depends(get_db)
 ):
-    users = crud.get_users_by_customer_id_global(db, customer_id)
+    users = crud.get_all_users_by_customer(db, customer_id)
     return [enrich_user_response(db, u) for u in users]
 
 @app.put("/api/superadmin/users/{user_id}", response_model=schemas.User)
@@ -508,17 +540,14 @@ def delete_participant_route(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found")
     return
 
-# ADDED: GET BOT CONFIGS
 @app.get("/api/bots/configs", response_model=List[schemas.BotConfig])
 def get_bot_configs_route(db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     return crud.get_bot_configs(db, current_user.customer_id)
 
-# ADDED: CREATE BOT CONFIG
 @app.post("/api/bots/create", response_model=schemas.BotConfig)
 def create_bot_config_route(bot: schemas.BotConfigCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     return crud.create_bot_config(db=db, customer_id=current_user.customer_id, bot=bot, user_id=current_user.id)
 
-# ADDED: UPDATE BOT CONFIG
 @app.put("/api/bots/update/{bot_id}", response_model=schemas.BotConfig)
 def update_bot_config_route(bot_id: int, bot_update: schemas.BotConfigUpdate, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     db_bot = crud.update_bot_config(db, customer_id=current_user.customer_id, bot_id=bot_id, bot_update=bot_update)
@@ -526,7 +555,6 @@ def update_bot_config_route(bot_id: int, bot_update: schemas.BotConfigUpdate, db
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
     return db_bot
 
-# ADDED: DELETE BOT CONFIG
 @app.delete("/api/bots/delete/{bot_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_bot_config_route(bot_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     db_bot = crud.delete_bot_config(db, customer_id=current_user.customer_id, bot_id=bot_id)
@@ -534,7 +562,6 @@ def delete_bot_config_route(bot_id: int, db: Session = Depends(get_db), current_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found")
     return
 
-# ADDED: GET BOT ACTIVITIES (Mocked for now)
 @app.get("/api/bots/{bot_id}/activities", response_model=List[schemas.BotActivity])
 def get_bot_activities_route(bot_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     """Retrieves recent activities (transcripts and actions) for a specific bot."""
@@ -543,14 +570,12 @@ def get_bot_activities_route(bot_id: int, db: Session = Depends(get_db), current
         return []
     return activities
 
-# ADDED: GET BOT PERFORMANCE (Mocked for now)
 @app.get("/api/bots/{bot_id}/performance", response_model=schemas.BotPerformance)
 def get_bot_performance_route(bot_id: int, db: Session = Depends(get_db), current_user: schemas.User = Depends(auth.get_current_user)):
     # In a real app, this would be computed from past meeting/activity data.
     # For now, we rely entirely on the frontend mock data to satisfy the schema.
     raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Performance metrics are computed on the client for now.")
 
-# ADDED: BARGE INTO MEETING (Update meeting state)
 @app.post("/api/bots/{bot_id}/barge", status_code=status.HTTP_200_OK)
 def barge_into_meeting_route(
     bot_id: int,
@@ -584,6 +609,19 @@ def barge_into_meeting_route(
     db.commit()
     
     return {"success": True}
+
+@app.get("/api/meetings/{room_id}/chat/history", response_model=List[schemas.ChatMessagePayload])
+async def get_chat_history_route(
+    room_id: str, 
+    skip: int = 0, 
+    limit: int = 50, 
+    db: Session = Depends(get_db), 
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """Retrieves persistent chat history for a given meeting room."""
+    # NOTE: Authorization check (is user for this customer/meeting?) is performed implicitly
+    # by the presence of a valid, customer-scoped JWT via get_current_user.
+    return crud.get_chat_history(db, room_id, skip=skip, limit=limit)
 
 # === WebSocket Logic ===
 @app.websocket("/ws/{room_id}/{user_id}")
@@ -799,110 +837,3 @@ async def broadcast(room_id: str, msg: dict, sender_id: str = None):
         for uid, info in list(rooms[room_id]["users"].items()):
             if sender_id != uid:
                 await safe_send(info["ws"], msg)
-                
-                
-@app.get("/api/superadmin/customers/{customer_id}/license", response_model=schemas.License)
-async def super_admin_get_license(
-    customer_id: int,
-    current_super_admin: models.User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
-):
-    license_data = crud.get_license_by_customer(db, customer_id)
-    if not license_data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="License not found for customer.")
-    return license_data
-
-@app.put("/api/superadmin/customers/{customer_id}/license", response_model=schemas.License)
-async def super_admin_manage_license(
-    customer_id: int,
-    license_data: schemas.LicenseBase,
-    current_super_admin: models.User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
-):
-    try:
-        license_obj = crud.create_or_update_license(db, customer_id, current_super_admin.id, license_data)
-        
-        crud.log_superadmin_activity(
-            db, 
-            customer_id, 
-            "LICENSE_UPDATE", 
-            f"Set license status to {license_data.status} for {license_data.duration_value} {license_data.duration_unit}."
-        )
-        return license_obj
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.put("/api/superadmin/customers/{customer_id}/license/revoke", response_model=schemas.License)
-async def super_admin_revoke_license(
-    customer_id: int,
-    current_super_admin: models.User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
-):
-    revoked_license = crud.revoke_license(db, customer_id)
-    if not revoked_license:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="License not found.")
-
-    crud.log_superadmin_activity(db, customer_id, "LICENSE_REVOKE", "License manually revoked.")
-    return revoked_license
-
-@app.get("/api/superadmin/license-requests", response_model=List[schemas.SuperAdminActivityLog])
-async def super_admin_get_license_requests(
-    current_super_admin: models.User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
-):
-    return crud.get_license_requests(db)
-
-# --- NEW: Customer-side License Request API ---
-@app.post("/api/license/request", status_code=status.HTTP_200_OK)
-async def customer_request_license(
-    request: schemas.LicenseRequest,
-    current_user: models.User = Depends(auth.get_current_user),
-    db: Session = Depends(get_db)
-):
-    if request.customer_id != current_user.customer_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot request license for another organization.")
-
-    crud.log_superadmin_activity(
-        db, 
-        request.customer_id, 
-        "LICENSE_REQUEST", 
-        f"Request from {current_user.email}: {request.message_body}"
-    )
-    
-    return {"message": "License request sent to SuperAdmin successfully."}
-
-
-@app.put("/api/superadmin/users/transfer", response_model=schemas.User)
-async def super_admin_transfer_user(
-    transfer_request: schemas.UserTransfer,
-    current_super_admin: models.User = Depends(get_current_super_admin),
-    db: Session = Depends(get_db)
-):
-    """Transfers a user from their current organization to a new one."""
-    
-    # Prevents SuperAdmin from accidentally kicking themselves out of their own scope
-    # (Optional, but safe guard)
-    if transfer_request.user_id == current_super_admin.id:
-        raise HTTPException(status_code=400, detail="Cannot transfer the active SuperAdmin account.")
-        
-    try:
-        updated_user = crud.transfer_user_to_customer(
-            db, 
-            transfer_request.user_id, 
-            transfer_request.new_customer_id
-        )
-        
-        if not updated_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-            
-        return enrich_user_response(db, updated_user)
-        
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=409, 
-            detail="Conflict: A user with that email already exists in the target organization."
-        )
-    except Exception as e:
-        print(f"Transfer error: {e}")
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during transfer.")
