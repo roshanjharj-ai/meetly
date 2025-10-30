@@ -761,7 +761,7 @@ class WebRTCManager {
       if (e.track.kind === "audio") {
         let audioElem = document.getElementById(`audio-${targetId}`) as HTMLAudioElement;
         if (!audioElem) {
-          audioEl = document.createElement("audio");
+          audioElem = document.createElement("audio");
           audioElem.id = `audio-${targetId}`;
           audioElem.autoplay = true;
           audioElem.muted = false;
@@ -778,7 +778,7 @@ class WebRTCManager {
             this.log("[useWebRTC] Autoplay blocked, trying muted playback for", targetId, err);
             audioElem.muted = true;
             try {
-              await audioEl.play();
+              await audioElem.play();
               this.log("[useWebRTC] Muted playback OK for", targetId);
             } catch (err2) {
               this.log("[useWebRTC] Muted playback also failed for", targetId, err2);
@@ -1150,7 +1150,9 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       if (chatMessages.length > 0) return chatMessages;
 
       if (!token) {
+        // Fallback for testing or if authentication is managed elsewhere
         console.warn("Authentication token not found. Proceeding without token.");
+        // In a production app, you might throw or redirect here.
       }
       
       // Assuming API URL structure based on main.py endpoint
