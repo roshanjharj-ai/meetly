@@ -700,11 +700,15 @@ class WebRTCManager {
           if (pc._iceRestartTimer) window.clearTimeout(pc._iceRestartTimer);
           pc._iceRestartTimer = window.setTimeout(() => {
             try {
-              // 🔥 FIX: Removed internal state check to make ICE restart more aggressive
-              // if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+              // 🔥 FIX 2.0: Only attempt ICE restart if we are the final initiator (impolite)
+              const isInitiator = !this.isPolite(targetId);
+
+              if (isInitiator) {
                 this.log("?? Attempting ICE restart for", targetId);
                 try { (pc as any).restartIce?.(); } catch (err) { this.log('restartIce failed', err); }
-              // }
+              } else {
+                this.log(`🟡 Skipping ICE restart for polite peer ${targetId}. Waiting for remote offer.`);
+              }
             } catch (err) { this.log('ice restart debounce error', err); }
           }, 2500);
         } else {
