@@ -17,8 +17,6 @@ const getBaseUrl = (): string => {
 
     // 2. If slug exists, prepend it to the API URL
     if (customerSlug) {
-        // Assuming RAW_API_BASE_URL is something like http://localhost:8000/api
-        // We want: http://localhost:8000/api/default
         // NOTE: The backend (main.py) does NOT use the slug in the path; only the frontend router does. 
         // We will stick to the original RAW_API_BASE_URL for the backend calls 
         // and rely on the JWT token for customer identification.
@@ -65,13 +63,13 @@ export interface FetchedUser extends UserProfileUpdate {
     id: number;
     email: string;
     user_name: string;
-    user_type: 'Admin' | 'Member';
+    user_type: 'Admin' | 'Member' | 'SuperAdmin';
     customer_slug: string;
 }
 
 // ... (Bot Mock Data and Interfaces remain the same)
 export interface BotConfig {
-    id: string;
+    id: string | number;
     name: string;
     description: string;
     status: 'Ready' | 'Attending' | 'Offline';
@@ -125,7 +123,63 @@ export interface LLMUsage {
     cost_history: LLMCostEntry[];
 }
 
+// --- CORE TYPES (Fixing Cannot Find Name Errors) ---
 
+// Corresponds to schemas.LicenseBase
+export interface LicenseBase {
+    duration_value: number;
+    duration_unit: 'days' | 'months' | 'years';
+    license_type: string;
+    status: string; // 'Active', 'Revoked', etc.
+}
+
+// Corresponds to schemas.License
+export interface License extends LicenseBase {
+    id: number;
+    customer_id: number;
+    license_key: string;
+    start_date: string; // ISO date string
+    expiry_date: string | null; // ISO date string or null
+    days_granted: number;
+    type: string;
+}
+
+// Corresponds to schemas.SuperAdminActivityLog
+export interface SuperAdminActivityLog {
+    customer_id: number;
+    activity_type: string;
+    content: string;
+    timestamp: string; // ISO date string
+}
+
+// Corresponds to schemas.Customer (FIXED: Added license)
+export interface Customer {
+    id: number;
+    name: string;
+    url_slug: string;
+    logo_url: string | null;
+    email_sender_name: string;
+    default_meeting_name: string;
+    email_config_json?: string;
+    created_at: string; // ISO date string
+    license?: License | null; // <<< FIX: ADDED LICENSE PROPERTY
+}
+
+export interface CustomerUpdate {
+    name: string;
+    url_slug: string;
+    logo_url?: string | null;
+    email_sender_name?: string;
+    default_meeting_name?: string;
+}
+
+export interface CustomerWithBotData extends Customer {
+    bot_count?: number;
+    bots_active?: number;
+    is_status_loading?: boolean;
+}
+
+// --- BOT MOCK DATA (Retained) ---
 const fallbackBots: BotConfig[] = [
     {
         id: 'b1',
@@ -273,6 +327,8 @@ interface signUpRequest {
     user_type: number
 }
 
+// --- API FUNCTIONS ---
+
 export const SignUp = async (request: signUpRequest): Promise<string> => {
     try {
         const response = await axios.post(`${getBaseUrl()}/signup`, request);
@@ -326,7 +382,7 @@ export const updateBotConfig = async (data: BotConfig): Promise<BotConfig> => {
     }
 };
 
-export const deleteBotConfig = async (id: string): Promise<{ success: boolean }> => {
+export const deleteBotConfig = async (id: string | number): Promise<{ success: boolean }> => {
     try {
         await axios.delete(`${getBaseUrl()}/bots/delete/${id}`);
         return { success: true };
@@ -358,7 +414,7 @@ export const getBotPerformance = async (botId: string): Promise<BotPerformance> 
     }
 };
 
-export const bargeIntoMeeting = async (botId: string, meetingId: string): Promise<{ success: boolean }> => {
+export const bargeIntoMeeting = async (botId: string | number, meetingId: string): Promise<{ success: boolean }> => {
     try {
         await axios.post(`${getBaseUrl()}/bots/${botId}/barge`, { meetingId });
         return { success: true };
@@ -555,6 +611,8 @@ export const verifyJoinCode = async (payload: VerifyCodePayload): Promise<{ vali
     return response.data;
 };
 
+// --- CUSTOMER TYPES (FIXED) ---
+// Corresponds to schemas.Customer (FIXED: Added license)
 export interface Customer {
     id: number;
     name: string;
@@ -563,6 +621,8 @@ export interface Customer {
     email_sender_name: string;
     default_meeting_name: string;
     email_config_json?: string;
+    created_at: string; // ISO date string
+    license?: License | null; // <<< FIX: ADDED LICENSE PROPERTY
 }
 
 export interface CustomerUpdate {
@@ -573,7 +633,13 @@ export interface CustomerUpdate {
     default_meeting_name?: string;
 }
 
-// --- CUSTOMER / ORGANIZATION API ---
+export interface CustomerWithBotData extends Customer {
+    bot_count?: number;
+    bots_active?: number;
+    is_status_loading?: boolean;
+}
+
+// --- SUPERADMIN API ---
 
 export const getCustomerDetails = async (): Promise<Customer> => {
     try {
@@ -623,4 +689,176 @@ export const removeUserFromOrganization = async (userId: number): Promise<void> 
         console.error(`Failed to remove user ${userId}.`, error);
         throw error;
     }
+};
+
+
+export const getAllCustomers = async (): Promise<Customer[]> => {
+    try {
+        const response = await axios.get(`${RAW_API_BASE_URL}/superadmin/customers`);
+        return response.data;
+    } catch (error) {
+        console.error("Failed to fetch all customers (SuperAdmin).", error);
+        throw error;
+    }
+};
+
+export const createNewCustomer = async (data: CustomerUpdate): Promise<Customer> => {
+    try {
+        const response = await axios.post(`${RAW_API_BASE_URL}/superadmin/customers`, data);
+        return response.data;
+    } catch (error) {
+        console.error("Failed to create new customer (SuperAdmin).", error);
+        throw error;
+    }
+};
+
+export const updateCustomerGlobal = async (customerId: number, data: CustomerUpdate): Promise<Customer> => {
+    try {
+        const response = await axios.put(`${RAW_API_BASE_URL}/superadmin/customers/${customerId}`, data);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to update customer ${customerId} (SuperAdmin).`, error);
+        throw error;
+    }
+};
+
+export const deleteCustomerGlobal = async (customerId: number): Promise<void> => {
+    try {
+        await axios.delete(`${RAW_API_BASE_URL}/superadmin/customers/${customerId}`);
+    } catch (error) {
+        console.error(`Failed to delete customer ${customerId} (SuperAdmin).`, error);
+        throw error;
+    }
+};
+
+export interface SuperAdminUserUpdatePayload {
+    user_type?: 'Admin' | 'Member' | 'Disabled';
+    is_active?: boolean;
+}
+
+export const updateUserGlobal = async (userId: number, data: SuperAdminUserUpdatePayload): Promise<FetchedUser> => {
+    try {
+        const response = await axios.put(`${RAW_API_BASE_URL}/superadmin/users/${userId}`, data);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to update user ${userId} globally.`, error);
+        throw error;
+    }
+};
+
+export const deleteUserGlobal = async (userId: number): Promise<void> => {
+    try {
+        await axios.delete(`${RAW_API_BASE_URL}/superadmin/users/${userId}`);
+    } catch (error) {
+        console.error(`Failed to delete user ${userId} globally.`, error);
+        throw error;
+    }
+};
+
+export const getCustomerLicense = async (customerId: number): Promise<License> => {
+    try {
+        const response = await axios.get(`${RAW_API_BASE_URL}/superadmin/customers/${customerId}/license`);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to fetch license for customer ${customerId}.`, error);
+        throw error;
+    }
+};
+
+export const manageCustomerLicense = async (customerId: number, data: LicenseBase): Promise<License> => {
+    try {
+        const response = await axios.put(`${RAW_API_BASE_URL}/superadmin/customers/${customerId}/license`, data);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to update/grant license for customer ${customerId}.`, error);
+        throw error;
+    }
+};
+
+export const revokeCustomerLicense = async (customerId: number): Promise<License> => {
+    try {
+        const response = await axios.put(`${RAW_API_BASE_URL}/superadmin/customers/${customerId}/license/revoke`);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to revoke license for customer ${customerId}.`, error);
+        throw error;
+    }
+};
+
+export const getLicenseRequests = async (): Promise<SuperAdminActivityLog[]> => {
+    try {
+        const response = await axios.get(`${RAW_API_BASE_URL}/superadmin/license-requests`);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to fetch license requests.`, error);
+        return [];
+    }
+};
+
+export const getCustomerBotsGlobal = async (customerId: number): Promise<BotConfig[]> => {
+    try {
+        // NOTE: This hits a NEW SuperAdmin endpoint on the backend: /superadmin/customers/{id}/bots
+        const response = await axios.get(`${RAW_API_BASE_URL}/superadmin/customers/${customerId}/bots`);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to fetch bots for customer ${customerId} (SuperAdmin).`, error);
+        // Fallback to empty array for failure
+        return [];
+    }
+};
+
+export const updateBotStatusGlobal = async (botId: number | string, newStatus: 'Ready' | 'Offline'): Promise<BotConfig> => {
+    try {
+        // NOTE: This hits a NEW SuperAdmin endpoint: /superadmin/bots/{id}/status
+        const response = await axios.put(`${RAW_API_BASE_URL}/superadmin/bots/${botId}/status`, { status: newStatus });
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to update bot status for bot ${botId} globally.`, error);
+        throw error;
+    }
+};
+
+
+export const getCustomerUsersGlobal = async (customerId: number): Promise<FetchedUser[]> => {
+    try {
+        // Hits the SuperAdmin endpoint to get all users for a specific customer ID
+        const response = await axios.get(`${RAW_API_BASE_URL}/superadmin/customers/${customerId}/users`);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to fetch users for customer ${customerId} (SuperAdmin).`, error);
+        throw error;
+    }
+};
+
+export const updateUserRoleGlobal = async (userId: number, data: SuperAdminUserUpdatePayload): Promise<FetchedUser> => {
+    try {
+        // Hits the SuperAdmin endpoint to update user roles/status globally
+        const response = await axios.put(`${RAW_API_BASE_URL}/superadmin/users/${userId}`, data);
+        return response.data;
+    } catch (error) {
+        console.error(`Failed to update user role for ${userId} globally.`, error);
+        throw error;
+    }
+};
+
+export interface UserTransferPayload {
+    user_id: number;
+    new_customer_id: number;
+}
+
+export const transferUserOrganization = async (payload: UserTransferPayload): Promise<FetchedUser> => {
+    try {
+        const response = await axios.put(`${RAW_API_BASE_URL}/superadmin/users/transfer`, payload);
+        return response.data;
+    } catch (error) {
+        console.error("Failed to transfer user organization.", error);
+        throw error;
+    }
+};
+
+export const getCustomerBySlug = async (slug: string): Promise<{ id: number, name: string, url_slug: string }> => {
+    // This assumes a new backend endpoint is created in main.py:
+    // @app.get("/api/customers/slug/{slug}", response_model=schemas.CustomerBase)
+    const response = await axios.get(`${RAW_API_BASE_URL}/customers/slug/${slug}`);
+    return response.data;
 };

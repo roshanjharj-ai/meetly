@@ -24,9 +24,11 @@ import UserProfile from './components/UserProfile';
 import UserManager from './components/UserManager';
 import MeetingHistory from './components/meeting/MeetingHistory';
 import ForgotPassword from './components/ForgotPassword';
+import SuperAdminOrgManager from './components/SuperAdminOrganizationManager';
+import LicenseExpired from './components/LicenseExpired';
 
 
-// --- Helper Component 1: ScopedRoutes (The content loader) ---
+// --- Helper Component 1: ScopedRoutes (The content loader for Admins/Members) ---
 const ScopedRoutes = ({ onLogout, user }: { onLogout: () => void, user: any }) => {
   const { customerSlug } = useParams<{ customerSlug: string }>();
 
@@ -40,7 +42,7 @@ const ScopedRoutes = ({ onLogout, user }: { onLogout: () => void, user: any }) =
       <Route element={<MainLayout onLogout={onLogout} />}>
         <Route path="dashboard" element={<DashboardHome user={user} />} />
         <Route path="join" element={<JoinMeeting />} />
-        <Route path="prejoin" element={<JoinMeeting />} />
+        <Route path="prejoin" element={<PreJoinMeeting />} />
         <Route path="meetings" element={<MeetingList />} />
         <Route path="participants" element={<ParticipantManager />} />
         <Route path='bots' element={<BotManager />} />
@@ -80,6 +82,12 @@ export default function App() {
   const isAuthenticated = token && user && user.customer_id && user.customer_slug;
   const customerSlug = user?.customer_slug || 'default';
 
+  // Check for license expiration/revocation
+  if (isAuthenticated && (user.license_status === 'Expired' || user.license_status === 'Revoked')) {
+    // This is the gate, rendering the license request UI if access is denied
+    return <LicenseExpired customerSlug={customerSlug} customerId={user.customer_id} />;
+  }
+
   return (
     <div className="vh-100" data-bs-theme={theme}>
       <Routes>
@@ -94,11 +102,13 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/:customerSlug/signup" element={<Signup />} />
             <Route path="/signup" element={<Signup />} />
+            
+            {/* Password Reset Routes */}
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ForgotPassword />} />
 
             {/* Default redirect for all unauthenticated users */}
             <Route path="*" element={<Navigate to="/login" replace />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password" element={<ForgotPassword />} />
           </>
         )}
 
@@ -110,10 +120,17 @@ export default function App() {
             <Route path="/login" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
             <Route path="/signup" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
 
-            {/* 2. MAIN SCOPED ROUTE: This is the only path that renders actual application content */}
+            {/* 2. SUPERADMIN GLOBAL ROUTES (Wrapped in MainLayout) */}
+            {user?.user_type === 'SuperAdmin' && (
+              <Route element={<MainLayout onLogout={logout} />}>
+                <Route path="/superadmin/orgs" element={<SuperAdminOrgManager />} />
+              </Route>
+            )}
+
+            {/* 3. MAIN SCOPED ROUTES (Member/Admin) */}
             <Route path={`/:customerSlug/*`} element={<ScopedRoutes onLogout={logout} user={user} />} />
 
-            {/* 3. FAILSAFE: If authenticated but somehow hit a path not covered, redirect to the scoped dashboard */}
+            {/* 4. FAILSAFE: If authenticated but somehow hit a path not covered, redirect to the scoped dashboard */}
             <Route path="*" element={<Navigate to={`/${customerSlug}/dashboard`} replace />} />
           </>
         )}

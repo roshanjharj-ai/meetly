@@ -144,6 +144,18 @@ const DashboardHome = ({ user }: DashboardProps) => {
                                 gridClass={cardGridClass}
                             />
                         )}
+
+                        {
+                            user.user_type == "SuperAdmin" &&
+                            <ActionCard
+                                title="Manage Organizations"
+                                icon={RiOrganizationChart}
+                                buttonText="Settings"
+                                onClick={() => navigate(`/superadmin/orgs`)} // Scoped navigation
+                                color="var(--bs-danger)"
+                                gridClass={cardGridClass}
+                            />
+                        }
                     </>
                 )}
             </div>

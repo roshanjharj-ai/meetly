@@ -11,9 +11,11 @@ import type { Customer, CustomerUpdate } from '../services/api';
 // Import the new Uploader component
 import ImageUploader from './shared/ImageUploader'; // Assuming this path is correct
 
-// Extended type for the component state (Must match the state structure you had before)
+// Extended type for the component state
+// NOTE: Customer interface in api.ts now includes created_at (assumed from schema fix)
 interface CustomerState extends Customer {
     
+    // created_at is implicitly included via `Customer` in api.ts
 }
 
 const OrganizationManager: React.FC = () => {
@@ -317,6 +319,11 @@ const OrganizationManager: React.FC = () => {
                     </button>
                 </div>
             </form>
+            
+            {/* Displaying Created At information (Optional addition for Admin view) */}
+            <div className="text-muted small text-center mt-4">
+                Organization created on: **{new Date(customer.created_at).toLocaleString()}**
+            </div>
         </div>
     );
 };

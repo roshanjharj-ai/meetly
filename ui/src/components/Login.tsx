@@ -2,7 +2,7 @@
 import axios from "axios";
 import { motion } from "framer-motion";
 import { useContext, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom"; // IMPORTED useParams
 import { FaSpinner } from 'react-icons/fa';
 import { FiMail, FiLock } from 'react-icons/fi';
 import aiLogo from "../assets/ai-meet-icon.png";
@@ -26,6 +26,10 @@ const Login = () => {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const isMobile = useMediaQuery("(max-width: 768px)");
+
+    // --- NEW: Get customerSlug from URL parameters ---
+    const { customerSlug } = useParams<{ customerSlug: string }>();
+    const slugPrefix = customerSlug ? `/${customerSlug}` : '';
 
     // --- EFFECT: Load saved credentials on mount ---
     useEffect(() => {
@@ -80,16 +84,28 @@ const Login = () => {
             // NOTE: The App.tsx router handles the final scoped redirect (/default/dashboard)
             navigate("/"); 
         } catch (err: any) {
-            setError(err.response?.data?.detail || "Login failed. Please check your credentials.");
+            const detail = err.response?.data?.detail;
+            
+            // >>> NEW LICENSE CHECK LOGIC <<<
+            if (detail === "LICENSE_EXPIRED_OR_REVOKED") {
+                // If license is expired, redirect to the appropriate license page (which must be public)
+                navigate(`${slugPrefix}/license-expired`, { state: { email: email } });
+                setError("");
+            } else {
+                // Display standard login error
+                setError(detail || "Login failed. Please check your credentials.");
+            }
+            // >>> END LICENSE CHECK LOGIC <<<
+
             handleCredentialStorage(loginSuccess);
         } finally {
             setIsLoading(false);
         }
     };
     
-    // --- Navigation Handlers ---
-    const navigateToSignup = () => navigate("/signup");
-    const navigateToForgotPassword = () => navigate("/forgot-password");
+    // --- Navigation Handlers (UPDATED to use slugPrefix) ---
+    const navigateToSignup = () => navigate(`${slugPrefix}/signup`);
+    const navigateToForgotPassword = () => navigate(`${slugPrefix}/forgot-password`);
 
 
     /** ---------- LOGIN FORM ---------- **/
@@ -121,7 +137,7 @@ const Login = () => {
                 >
                     <div className="d-flex flex-column gap-3">
                         
-                        {/* Email Input - FIX: Moving icon outside form-floating */}
+                        {/* Email Input */}
                         <div className="input-group">
                             <span className="input-group-text"><FiMail /></span>
                             <div className="form-floating flex-grow-1">
@@ -134,7 +150,7 @@ const Login = () => {
                             </div>
                         </div>
 
-                        {/* Password Input - FIX: Moving icon outside form-floating */}
+                        {/* Password Input */}
                         <div className="input-group">
                             <span className="input-group-text"><FiLock /></span>
                             <div className="form-floating flex-grow-1">

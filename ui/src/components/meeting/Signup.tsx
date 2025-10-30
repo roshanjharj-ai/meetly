@@ -2,26 +2,43 @@
 import { GoogleLogin, GoogleOAuthProvider, type CredentialResponse } from '@react-oauth/google';
 import axios from "axios";
 import { motion } from "framer-motion";
-import { useContext, useState } from "react";
-import { FiArrowLeft, FiLock, FiMail, FiUser } from "react-icons/fi";
+import { useContext, useState, useEffect } from "react"; // Added useEffect
+import { FiArrowLeft, FiLock, FiMail, FiUser } from "react-icons/fi"; // Added FaSpinner for loading UI
 import { useNavigate, useParams } from "react-router-dom";
 
-import aiLogo from "../../assets/ai-meet-icon.png"; // Adjust the import path as needed
-import { UserContext } from "../../context/UserContext"; // Adjust the import path as needed
+import aiLogo from "../../assets/ai-meet-icon.png"; 
+import { UserContext } from "../../context/UserContext"; 
 import { SignUp } from '../../services/api';
+import { FaSpinner } from 'react-icons/fa';
 
 // ❗ IMPORTANT: Replace with your actual Google Client ID from the Google Cloud Console
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
+
+// NOTE: You must implement this function in your services/api.ts
+// This is a placeholder/mock of the required function.
+const getCustomerBySlug = async (slug: string): Promise<{ id: number, name: string, url_slug: string }> => {
+    try {
+        const response = await axios.get(`${API_BASE_URL}/customers/slug/${slug}`);
+        return response.data;
+    } catch (error) {
+        // Fallback for when slug is 'default' or API endpoint is missing
+        console.warn(`[Signup] Failed to fetch customer data for slug: ${slug}. Defaulting to ID 1.`);
+        return { id: 1, name: 'Default Organization', url_slug: 'default' };
+    }
+};
 
 
 const Signup = () => {
   const navigate = useNavigate();
   const { login } = useContext(UserContext);
 
-  // NEW: Get customerSlug from URL if present (e.g., /test-company/signup)
   const { customerSlug } = useParams<{ customerSlug: string }>();
   const redirectPath = customerSlug ? `/${customerSlug}/dashboard` : "/";
+
+  // New state to hold the resolved customer ID
+  const [resolvedCustomerId, setResolvedCustomerId] = useState<number | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const [formData, setFormData] = useState({
     user_name: "",
@@ -32,13 +49,34 @@ const Signup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // --- EFFECT: Resolve Customer ID from Slug ---
+  useEffect(() => {
+    const slug = customerSlug || 'default';
+    
+    const resolveCustomer = async () => {
+        try {
+            const customerData = await getCustomerBySlug(slug);
+            setResolvedCustomerId(customerData.id);
+        } catch (e) {
+            // If API fails or slug is bad, default to 1, but keep error for visibility
+            setError(`Could not resolve organization for slug '${slug}'. Defaulting to Organization ID 1.`);
+            setResolvedCustomerId(1);
+        } finally {
+            setInitialLoading(false);
+        }
+    };
+    
+    resolveCustomer();
+  }, [customerSlug]);
+
+
   /**
    * Handles the local database sign-up process.
    */
   const handleLocalSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.password || !formData.user_name) {
-      setError("Please fill out all fields.");
+    if (!formData.name || !formData.email || !formData.password || !formData.user_name || resolvedCustomerId === null) {
+      setError("Please fill out all fields and ensure the organization ID is resolved.");
       return;
     }
 
@@ -46,20 +84,21 @@ const Signup = () => {
     setIsLoading(true);
 
     try {
-      // Step 1: Create the user account in the database
+      // Step 1: Create the user account in the database with the RESOLVED ID
       const signupPayload = {
         email: formData.email,
         password: formData.password,
         full_name: formData.name,
         user_name: formData.user_name,
-        customer_id: 1,
-        user_type: 1
+        customer_id: resolvedCustomerId, // Use the dynamically resolved ID
+        user_type: 1 // Assuming 1 maps to 'Member' or 'User' role in your system
       };
+      // NOTE: Assuming SignUp API returns status code/response that indicates success
       await SignUp(signupPayload);
 
       // Step 2: Automatically log the user in to get a token
       const loginFormData = new URLSearchParams();
-      loginFormData.append('username', formData.email); // FastAPI's OAuth2 form uses 'username' for email
+      loginFormData.append('username', formData.email); 
       loginFormData.append('password', formData.password);
       const tokenResponse = await axios.post(`${API_BASE_URL}/token`, loginFormData);
 
@@ -68,6 +107,7 @@ const Signup = () => {
       navigate(redirectPath);
 
     } catch (err: any) {
+      // Check for specific error status codes if needed
       setError(err.response?.data?.detail || "Signup failed. The email might already be in use.");
     } finally {
       setIsLoading(false);
@@ -76,10 +116,10 @@ const Signup = () => {
 
   /**
    * Handles successful Google Sign-In.
-   * It sends the Google token to the backend for verification.
-   * The backend validates the token, creates a user if one doesn't exist, and returns a JWT.
    */
   const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    // Note: The backend needs to be smart enough to assign the user to 
+    // the correct organization based on the resolvedCustomerId or a claim in the Google token.
     setError("");
     setIsLoading(true);
     try {
@@ -89,7 +129,8 @@ const Signup = () => {
       }
 
       // Send the Google token to our backend
-      const response = await axios.post(`${API_BASE_URL}/auth/google`, { token });
+      // NOTE: You may need to pass customerSlug/resolvedCustomerId to the backend auth endpoint here.
+      const response = await axios.post(`${API_BASE_URL}/auth/google`, { token }); 
 
       // Update global state with our app's token and redirect
       login(response.data.access_token);
@@ -101,6 +142,9 @@ const Signup = () => {
       setIsLoading(false);
     }
   };
+  
+  // Disable form submission if we are still loading the customer ID
+  const isFormDisabled = isLoading || initialLoading;
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -131,40 +175,47 @@ const Signup = () => {
             />
             <h2 className="fw-bold text-light">Create Your Account</h2>
             <p className="small" style={{ color: "#E0C3FF" }}>
-              Join to experience smarter meetings.
+              Joining organization: **{customerSlug || 'default'}** (ID: {resolvedCustomerId !== null ? resolvedCustomerId : '...' })
             </p>
           </div>
+          
+          {/* Initial Loading Indicator */}
+          {initialLoading && (
+              <div className="text-center text-light mb-4">
+                  <FaSpinner className="spinner-border" size={20} /> Resolving organization...
+              </div>
+          )}
 
           {/* Local Signup Form */}
           <form onSubmit={handleLocalSignup} className="text-start">
             <div className="form-floating mb-3">
               <input type="text" id="user_name" placeholder="User Name" value={formData.user_name}
                 onChange={(e) => setFormData((p) => ({ ...p, user_name: e.target.value }))}
-                className="form-control form-control-lg bg-transparent text-light border-light" required />
+                className="form-control form-control-lg bg-transparent text-light border-light" required disabled={isFormDisabled} />
               <label htmlFor="user_name" className="text-light"><FiUser className="me-2" /> User Name</label>
             </div>
             <div className="form-floating mb-3">
               <input type="text" id="name" placeholder="Full Name" value={formData.name}
                 onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                className="form-control form-control-lg bg-transparent text-light border-light" required />
+                className="form-control form-control-lg bg-transparent text-light border-light" required disabled={isFormDisabled} />
               <label htmlFor="name" className="text-light"><FiUser className="me-2" /> Full Name</label>
             </div>
             <div className="form-floating mb-3">
               <input type="email" id="email" placeholder="Email" value={formData.email}
                 onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
-                className="form-control form-control-lg bg-transparent text-light border-light" required />
+                className="form-control form-control-lg bg-transparent text-light border-light" required disabled={isFormDisabled} />
               <label htmlFor="email" className="text-light"><FiMail className="me-2" /> Email</label>
             </div>
             <div className="form-floating mb-4">
               <input type="password" id="password" placeholder="Password" value={formData.password}
                 onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
-                className="form-control form-control-lg bg-transparent text-light border-light" required />
+                className="form-control form-control-lg bg-transparent text-light border-light" required disabled={isFormDisabled} />
               <label htmlFor="password" className="text-light"><FiLock className="me-2" /> Password</label>
             </div>
             {error && <p className="text-danger small text-center mb-3">{error}</p>}
-            <motion.button whileTap={{ scale: 0.95 }} type="submit" disabled={isLoading}
+            <motion.button whileTap={{ scale: 0.95 }} type="submit" disabled={isFormDisabled}
               className="btn btn-primary w-100 py-2 fw-semibold shadow-sm">
-              {isLoading ? "Creating Account..." : "Sign Up with Email"}
+              {isFormDisabled ? "Loading..." : "Sign Up with Email"}
             </motion.button>
           </form>
 
@@ -178,6 +229,7 @@ const Signup = () => {
               theme="outline"
               size="large"
               shape="pill"
+              //disabled={isFormDisabled}
             />
           </div>
 

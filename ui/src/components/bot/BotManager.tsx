@@ -4,10 +4,10 @@ import { motion } from 'framer-motion';
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { FiAlertTriangle, FiCheckCircle, FiEdit, FiInfo, FiMonitor, FiPlus, FiSettings, FiTool, FiTrash2, FiTrendingUp, FiZap } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
+import { UserContext } from '../../context/UserContext';
 import { createBotConfig, deleteBotConfig, getBotConfigs, updateBotConfig, type BotConfig } from '../../services/api';
 import AlertModal from '../shared/AlertModal';
 import BotConfigDrawer from './BotConfigDrawer';
-import { UserContext } from '../../context/UserContext';
 
 // --- UTILITY COMPONENTS ---
 

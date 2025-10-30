@@ -39,7 +39,7 @@ export type UserAndRoom = {
     mobile?: string;
     picture?: string;
     customer_slug?: string;
-    customer_id?: string;
+    customer_id: number;
     user_type?: string;
 }
 
@@ -47,6 +47,7 @@ export interface FullUserProfile extends UserAndRoom {
     full_name?: string;
     mobile?: string;
     photo_url?: string;
+    license_status: string
     // Add any other fields that your backend's User schema provides
 }
 
