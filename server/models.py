@@ -1,14 +1,44 @@
 # models.py
 from sqlalchemy import BigInteger, Column, Integer, String, Text, DateTime, ForeignKey, Table, Boolean, func, UniqueConstraint
 from sqlalchemy.orm import relationship
-from database import Base
+from database import Base # Assuming database.py provides the Base class
 
 meeting_participants = Table('meeting_participants', Base.metadata,
     Column('meeting_id', Integer, ForeignKey('meetings.id', ondelete="CASCADE"), primary_key=True),
     Column('participant_id', Integer, ForeignKey('participants.id', ondelete="CASCADE"), primary_key=True)
 )
 
-# --- NEW TABLE: Customer / Tenant ---
+# --- NEW TABLE: Organization Licenses ---
+class License(Base):
+    __tablename__ = "licenses"
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), unique=True, nullable=False)
+    license_key = Column(String(128), unique=True, nullable=False)
+    status = Column(String(20), default='Trial', nullable=False)
+    type = Column(String(50), default='Standard', nullable=False)
+    start_date = Column(DateTime(timezone=True), default=func.now())
+    expiry_date = Column(DateTime(timezone=True), nullable=True)
+    days_granted = Column(Integer, default=0)
+    created_by_user_id = Column(Integer, ForeignKey('users.id', ondelete="SET NULL"))
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    customer = relationship("Customer", back_populates="license", uselist=False)
+    creator = relationship("User", foreign_keys=[created_by_user_id])
+    
+# --- NEW TABLE: Password Reset Tokens ---
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
+    token = Column(String(64), unique=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    
+    user = relationship("User")
+
+
+# --- Core Models with updated relationships ---
+
 class Customer(Base):
     __tablename__ = "customers"
     id = Column(Integer, primary_key=True, index=True)
@@ -17,7 +47,7 @@ class Customer(Base):
     email_sender_name = Column(String(255), default='System Bot')
     email_config_json = Column(Text, nullable=True)
     default_meeting_name = Column(String(255), default='Team Meeting')
-    url_slug = Column(String(255), unique=True, nullable=False) # NEW for routing
+    url_slug = Column(String(255), unique=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=func.now())
 
     # Relationships
@@ -25,9 +55,7 @@ class Customer(Base):
     participants = relationship("Participant", back_populates="customer")
     meetings = relationship("Meeting", back_populates="customer")
     bot_configs = relationship("BotConfig", back_populates="customer")
-
-
-# --- Core Models with customer_id ---
+    license = relationship("License", back_populates="customer", uselist=False)
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
@@ -46,7 +74,7 @@ class ChatMessage(Base):
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False) # NEW
+    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False)
     email = Column(String, index=True, nullable=False)
     full_name = Column(String)
     user_name = Column(String, index=True, nullable=False)
@@ -55,7 +83,7 @@ class User(Base):
     hashed_password = Column(String)
     provider = Column(String, default='local')
     provider_id = Column(String, unique=True, nullable=True)
-    user_type = Column(String(50), nullable=False, default='Member') # NEW: 'Admin' or 'Member'
+    user_type = Column(String(50), nullable=False, default='Member')
 
     # Relationships
     customer = relationship("Customer", back_populates="users")
@@ -70,7 +98,7 @@ class User(Base):
 class Participant(Base):
     __tablename__ = "participants"
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False) # NEW
+    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
     email = Column(String, index=True, nullable=False)
     mobile = Column(String, nullable=True)
@@ -87,26 +115,24 @@ class Participant(Base):
 class Meeting(Base):
     __tablename__ = "meetings"
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False) # NEW
+    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False)
     subject = Column(String, nullable=False)
     agenda = Column(Text, nullable=True)
     date_time = Column(DateTime(timezone=True), nullable=False)
     meeting_link = Column(String)
-    meeting_type = Column(String(50), default='Multi-Participant', nullable=False) # NEW
-    config_json = Column(Text, nullable=True) # NEW for permissions
+    meeting_type = Column(String(50), default='Multi-Participant', nullable=False)
+    config_json = Column(Text, nullable=True)
 
     # Relationships
     customer = relationship("Customer", back_populates="meetings")
     participants = relationship("Participant", secondary=meeting_participants, backref="meetings")
 
 
-# --- BOT Management Models with customer_id ---
-
 class BotConfig(Base):
     __tablename__ = "bot_configs"
     
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False) # NEW
+    customer_id = Column(Integer, ForeignKey('customers.id', ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(Text)
     pm_tool = Column(String(50), default="None", nullable=False)
@@ -146,14 +172,3 @@ class BotActivity(Base):
     activity_type = Column(String(50), nullable=False)
     content = Column(Text, nullable=False)
     task_status = Column(String(50), nullable=True)
-    
-    
-class PasswordResetToken(Base):
-    __tablename__ = "password_reset_tokens"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id', ondelete="CASCADE"), nullable=False)
-    token = Column(String(64), unique=True, nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    created_at = Column(DateTime(timezone=True), default=func.now())
-
-    user = relationship("User")

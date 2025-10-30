@@ -22,26 +22,81 @@ class VerifyCodeResponse(BaseModel):
     message: str
     token: Optional[str] = None
 
-# --- NEW: Customer Schemas ---
+# --- Password Reset Schemas ---
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+    
+# --- License Schemas ---
+class LicenseBase(BaseModel):
+    duration_value: int = Field(..., gt=0)
+    duration_unit: str = Field(..., pattern="^(days|months|years)$")
+    license_type: str = 'Standard'
+    status: str = 'Active'
+
+class License(BaseModel): 
+    id: int
+    customer_id: int
+    license_key: str
+    start_date: datetime
+    expiry_date: Optional[datetime]
+    days_granted: int
+    status: str 
+    type: str 
+    
+    class Config:
+        from_attributes = True
+
+# --- Customer Schemas ---
 class CustomerBase(BaseModel):
     name: str
     logo_url: Optional[str] = None
     email_sender_name: Optional[str] = 'System Bot'
     default_meeting_name: Optional[str] = 'Team Meeting'
-    url_slug: str # NEW: Required for URL routing
+    url_slug: str
 
 class CustomerCreate(CustomerBase):
     pass 
+    
+class CustomerCreateAdmin(CustomerBase):
+    pass 
+    
+class CustomerUpdateAdmin(CustomerBase):
+    pass
 
 class Customer(CustomerBase):
     id: int
     email_config_json: Optional[str] = None
+    created_at: datetime
+    license: Optional[License] = None
     
     class Config:
         from_attributes = True
 
+# --- License Request & Activity Log Schemas ---
+class LicenseRequest(BaseModel):
+    customer_id: int
+    message_body: str
+    
+class SuperAdminActivityLog(BaseModel):
+    customer_id: int
+    activity_type: str
+    content: str
+    timestamp: datetime
+    
+    class Config:
+        from_attributes = True
+        
+# --- NEW: User Transfer Schema ---
+class UserTransfer(BaseModel):
+    user_id: int
+    new_customer_id: int
 
-# --- NEW: Meeting Configuration Payload ---
+
+# --- Meeting Configuration Payload ---
 class MeetingPermissionConfig(BaseModel):
     # Global/Default permissions for the meeting
     allow_screen_share: bool = True
@@ -49,12 +104,7 @@ class MeetingPermissionConfig(BaseModel):
     allow_audio: bool = True
     allow_group_chat: bool = True
     allow_private_chat: bool = True
-    
-    # Per-participant overrides (participant_id: permission_dict)
-    # Stored as strings because participant_id is int but model doesn't enforce
     participant_overrides: Dict[str, Dict[str, bool]] = Field(default_factory=dict)
-    
-    # Speaker list for Webinar/One-on-One
     speaker_ids: List[int] = Field(default_factory=list)
 
 
@@ -69,7 +119,7 @@ class ParticipantCreate(ParticipantBase):
 
 class Participant(ParticipantBase):
     id: int
-    customer_id: int # NEW
+    customer_id: int
     class Config:
         from_attributes = True
 
@@ -79,22 +129,22 @@ class MeetingBase(BaseModel):
     agenda: Optional[str] = None
     date_time: datetime
     meeting_link: Optional[str] = None
-    meeting_type: str = 'Multi-Participant' # NEW
-    config: Optional[MeetingPermissionConfig] = None # NEW (pydantic object for input)
+    meeting_type: str = 'Multi-Participant'
+    config: Optional[MeetingPermissionConfig] = None
 
 class MeetingCreate(MeetingBase):
     participant_ids: List[int] = []
 
 class Meeting(MeetingBase):
     id: int
-    customer_id: int # NEW
+    customer_id: int
     participants: List[Participant] = []
-    config_json: Optional[str] = None # The raw JSON string from the DB (for output)
+    config_json: Optional[str] = None
 
     class Config:
         from_attributes = True
 
-# --- NEW: Chat Message Schemas ---
+# --- Chat Message Schemas ---
 class AttachmentPayload(BaseModel):
     name: str
     dataUrl: Optional[str] = None 
@@ -134,9 +184,9 @@ class BotConfigCreate(BotConfigBase):
 class BotConfigUpdate(BotConfigBase):
     pass
 
-class BotConfig(BotConfigBase):
+class BotConfig(BaseModel):
     id: int
-    customer_id: int # NEW
+    customer_id: int
     status: str = "Offline"
     current_meeting_id: Optional[str] = None
     current_meeting_subject: Optional[str] = None
@@ -206,6 +256,10 @@ class UserCreate(UserBase):
     user_name: str
     customer_id: int 
 
+class SuperAdminUserUpdate(BaseModel):
+    user_type: Optional[str] = None
+    is_active: Optional[bool] = None 
+
 class User(UserBase):
     id: int
     customer_id: int 
@@ -213,8 +267,9 @@ class User(UserBase):
     user_name: Optional[str] = None
     mobile: Optional[str] = None
     picture: Optional[str] = None
-    user_type: str = 'Member' # NEW: Expose user type
+    user_type: str = 'Member'
     customer_slug: Optional[str] = None # NEW: Passed from backend for frontend routing
+    license_status: Optional[str] = None # <<< FIX: ADDED LICENSE STATUS
 
     class Config:
         from_attributes = True
@@ -226,12 +281,12 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
     customer_id: Optional[int] = None
-    user_type: Optional[str] = None # NEW: Include user type in token data
+    user_type: Optional[str] = None
    
     
 class LLMCostEntry(BaseModel):
     date: datetime
-    cost: float # Cost incurred (e.g., USD)
+    cost: float
     tokens_used: int
     
     class Config:
@@ -245,10 +300,3 @@ class LLMUsage(BaseModel):
     
     class Config:
         from_attributes = True
-        
-class PasswordResetRequest(BaseModel):
-    email: EmailStr
-
-class PasswordResetConfirm(BaseModel):
-    token: str
-    new_password: str = Field(..., min_length=8)

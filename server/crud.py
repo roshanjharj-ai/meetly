@@ -5,12 +5,13 @@ import schemas
 import auth
 import random
 import string
+import secrets
+from datetime import datetime, timedelta, timezone
+from dateutil.relativedelta import relativedelta
 from typing import List, Optional
 import json
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
-import secrets
-from datetime import datetime, timedelta
 
 TOKEN_EXPIRY_MINUTES = 60
 
@@ -63,19 +64,31 @@ def update_user(db: Session, user: models.User, update_data: schemas.UserUpdate)
     db.refresh(user)
     return user
 
-def create_oauth_user(db: Session, user: schemas.UserBase, customer_id: int, provider: str, provider_id: str):
-    db_user = models.User(
-        customer_id=customer_id,
-        email=user.email, 
-        full_name=user.full_name, 
-        provider=provider, 
-        provider_id=provider_id,
-        user_type='Member'
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+
+def enrich_user_response(db: Session, user: models.User) -> schemas.User:
+    # Use the customer getter which already eager-loads the license
+    customer = get_customer_by_id(db, user.customer_id)
+    
+    enriched_user = schemas.User.model_validate(user)
+    
+    if customer:
+        enriched_user.customer_slug = customer.url_slug
+        
+        # --- FIX: Set license_status ---
+        if customer.license:
+            # We must explicitly call the license check to update the status if expired
+            is_active = check_license_active(db, user.customer_id) 
+            
+            # Re-fetch license data after potential update
+            license_data = customer.license 
+            
+            enriched_user.license_status = license_data.status
+        else:
+            # Default behavior if no license record exists (should return "False" if active check is called)
+            enriched_user.license_status = "NOT_LICENSED"
+    
+    return enriched_user
+
 
 # --- Meeting CRUD (Customer-Scoped) ---
 
@@ -166,7 +179,6 @@ def delete_meeting(db: Session, customer_id: int, meeting_id: int):
     db_meeting = get_meeting_by_id_and_customer(db, customer_id, meeting_id)
     if db_meeting:
         db.delete(db_meeting)
-        # Also attempt to delete the state in case it's live
         db_state = db.query(models.MeetingState).filter(models.MeetingState.room_id == db_meeting.meeting_link).first()
         if db_state: db.delete(db_state)
         db.commit()
@@ -270,7 +282,7 @@ def delete_bot_config(db: Session, customer_id: int, bot_id: int):
         db.commit()
     return db_bot
 
-# --- Bot Activity CRUD & Meeting State CRUD (Unchanged) ---
+# --- Bot Activity CRUD & Meeting State CRUD (Existing Working Functions) ---
 def get_bot_by_id(db: Session, bot_id: int):
     return db.query(models.BotConfig).filter(models.BotConfig.id == bot_id).first()
 
@@ -309,8 +321,6 @@ def create_or_update_meeting_state(db: Session, state: schemas.MeetingState):
     db.commit()
     db.refresh(db_state)
     return db_state
-
-# --- Chat Message CRUD (Unchanged) ---
 
 def create_chat_message(db: Session, room_id: str, message: schemas.ChatMessagePayload):
     message_data = message.model_dump(by_alias=True, exclude_none=True)
@@ -361,74 +371,8 @@ def get_chat_history(db: Session, room_id: str, skip: int = 0, limit: int = 50) 
     return messages
 
 
-def get_customer_by_slug(db: Session, url_slug: str):
-    return db.query(models.Customer).filter(models.Customer.url_slug == url_slug).first()
-
-# --- NEW: Customer CRUD ---
-def get_customer_by_id(db: Session, customer_id: int):
-    return db.query(models.Customer).filter(models.Customer.id == customer_id).first()
-
-def create_customer(db: Session, customer: schemas.CustomerCreate):
-    try:
-        db_customer = models.Customer(
-            name=customer.name,
-            url_slug=customer.url_slug,
-            logo_url=customer.logo_url,
-            email_sender_name=customer.email_sender_name,
-            default_meeting_name=customer.default_meeting_name
-        )
-        db.add(db_customer)
-        db.commit()
-        db.refresh(db_customer)
-        return db_customer
-    except IntegrityError:
-        db.rollback()
-        raise ValueError("Customer with this name or slug already exists.")
-
-def update_customer(db: Session, customer_id: int, customer_update: schemas.CustomerBase):
-    db_customer = get_customer_by_id(db, customer_id)
-    if not db_customer:
-        return None
-        
-    update_data = customer_update.model_dump(exclude_unset=True)
-    
-    for key, value in update_data.items():
-        setattr(db_customer, key, value)
-        
-    db.add(db_customer)
-    db.commit()
-    db.refresh(db_customer)
-    return db_customer
-
-def delete_customer(db: Session, customer_id: int):
-    # WARNING: Deleting a customer will cascade delete ALL associated users, meetings, bots, and participants!
-    db_customer = get_customer_by_id(db, customer_id)
-    if db_customer:
-        db.delete(db_customer)
-        db.commit()
-    return db_customer
-
-
-def get_all_users_by_customer(db: Session, customer_id: int):
-    """Retrieves all users belonging to a specific customer."""
-    return db.query(models.User).filter(models.User.customer_id == customer_id).all()
-
-def remove_user_by_id(db: Session, customer_id: int, user_id: int):
-    """Removes a user from the organization by deleting the user record."""
-    db_user = db.query(models.User).filter(
-        models.User.customer_id == customer_id,
-        models.User.id == user_id
-    ).first()
-    
-    if db_user:
-        # Note: Cascade delete handles linked bot configs/other tables.
-        db.delete(db_user)
-        db.commit()
-    return db_user
-
-
+# --- Password Reset Logic (Existing Working Functions) ---
 def create_reset_token(db: Session, user_id: int):
-    # Invalidate existing tokens for the user
     db.query(models.PasswordResetToken).filter(
         models.PasswordResetToken.user_id == user_id
     ).delete()
@@ -454,7 +398,6 @@ def get_user_by_reset_token(db: Session, token: str):
     ).first()
     
     if db_token:
-        # Return the associated user object
         return db_token.user
     return None
 
@@ -474,3 +417,220 @@ def update_user_password(db: Session, user_id: int, new_password: str):
         db.refresh(db_user)
         return True
     return False
+
+# --- Customer/Organization CRUD ---
+
+def get_customer_by_id(db: Session, customer_id: int):
+    return db.query(models.Customer).options(joinedload(models.Customer.license)).filter(models.Customer.id == customer_id).first()
+
+def update_customer(db: Session, customer_id: int, customer_update: schemas.CustomerBase):
+    db_customer = get_customer_by_id(db, customer_id)
+    if not db_customer:
+        return None
+        
+    update_data = customer_update.model_dump(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(db_customer, key, value)
+        
+    db.add(db_customer)
+    db.commit()
+    db.refresh(db_customer)
+    return db_customer
+
+def delete_customer(db: Session, customer_id: int):
+    db_customer = get_customer_by_id(db, customer_id)
+    if db_customer:
+        db.delete(db_customer)
+        db.commit()
+    return db_customer
+
+# --- User Management for Admin ---
+
+def get_all_users_by_customer(db: Session, customer_id: int):
+    return db.query(models.User).filter(models.User.customer_id == customer_id).all()
+
+def remove_user_by_id(db: Session, customer_id: int, user_id: int):
+    db_user = db.query(models.User).filter(
+        models.User.customer_id == customer_id,
+        models.User.id == user_id
+    ).first()
+    
+    if db_user:
+        db.delete(db_user)
+        db.commit()
+    return db_user
+
+
+# --- SuperAdmin-level CRUD (Global Scope) ---
+
+def get_all_customers(db: Session):
+    return db.query(models.Customer).options(joinedload(models.Customer.license)).all()
+
+def update_user_globally(db: Session, user_id: int, update_data: schemas.SuperAdminUserUpdate):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        return None
+        
+    update_dict = update_data.model_dump(exclude_unset=True)
+    
+    if 'user_type' in update_dict:
+        db_user.user_type = update_dict['user_type']
+        
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def delete_user_globally(db: Session, user_id: int):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if db_user:
+        db.delete(db_user)
+        db.commit()
+    return db_user
+
+def create_customer_globally(db: Session, customer: schemas.CustomerCreateAdmin):
+    try:
+        db_customer = models.Customer(
+            name=customer.name,
+            url_slug=customer.url_slug,
+            logo_url=customer.logo_url,
+            email_sender_name=customer.email_sender_name,
+            default_meeting_name=customer.default_meeting_name
+        )
+        db.add(db_customer)
+        db.commit()
+        db.refresh(db_customer)
+        return db_customer
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("Customer with this name or slug already exists.")
+
+
+def update_customer_globally(db: Session, customer_id: int, customer_update: schemas.CustomerUpdateAdmin):
+    return update_customer(db, customer_id, customer_update)
+
+def delete_customer_globally(db: Session, customer_id: int):
+    return delete_customer(db, customer_id)
+
+def get_bots_by_customer_id_global(db: Session, customer_id: int):
+    return db.query(models.BotConfig).filter(models.BotConfig.customer_id == customer_id).all()
+
+def update_bot_status_by_id_global(db: Session, bot_id: int, new_status: str):
+    db_bot = db.query(models.BotConfig).filter(models.BotConfig.id == bot_id).first()
+    if db_bot:
+        db_bot.status = new_status
+        db.add(db_bot)
+        db.commit()
+        db.refresh(db_bot)
+    return db_bot
+
+def transfer_user_to_customer(db: Session, user_id: int, new_customer_id: int):
+    """
+    Transfers a user's customer_id and resets their role to 'Member'.
+    """
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    
+    if not db_user:
+        return None
+
+    # 1. Update the user's foreign key
+    db_user.customer_id = new_customer_id
+    
+    # 2. Reset the user's role to the lowest level (Member) in the new organization
+    db_user.user_type = 'Member'
+    
+    # 3. Commit (IntegrityError will be raised if email conflict exists in main.py)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+# --- License Management Functions ---
+
+def calculate_expiry(start_date: datetime, value: int, unit: str) -> datetime:
+    """Calculates the new expiry date based on the duration."""
+    if unit == 'days':
+        return start_date + timedelta(days=value)
+    elif unit == 'months':
+        return start_date + relativedelta(months=value)
+    elif unit == 'years':
+        return start_date + relativedelta(years=value)
+    raise ValueError("Invalid duration unit.")
+
+def get_license_by_customer(db: Session, customer_id: int) -> Optional[models.License]:
+    return db.query(models.License).filter(models.License.customer_id == customer_id).first()
+
+def create_or_update_license(db: Session, customer_id: int, user_id: int, license_data: schemas.LicenseBase):
+    db_license = get_license_by_customer(db, customer_id)
+    now = datetime.now(timezone.utc)
+    
+    if license_data.duration_unit == 'years':
+        days_granted = license_data.duration_value * 365
+    elif license_data.duration_unit == 'months':
+        days_granted = license_data.duration_value * 30
+    else:
+        days_granted = license_data.duration_value
+
+    new_expiry_date = calculate_expiry(now, license_data.duration_value, license_data.duration_unit)
+
+    if db_license:
+        db_license.status = license_data.status
+        db_license.type = license_data.license_type
+        db_license.expiry_date = new_expiry_date
+        db_license.days_granted += days_granted
+        db_license.updated_at = now
+    else:
+        db_license = models.License(
+            customer_id=customer_id,
+            license_key=secrets.token_urlsafe(64),
+            status=license_data.status,
+            type=license_data.license_type,
+            start_date=now,
+            expiry_date=new_expiry_date,
+            days_granted=days_granted,
+            created_by_user_id=user_id
+        )
+        db.add(db_license)
+
+    db.commit()
+    db.refresh(db_license)
+    return db_license
+
+def revoke_license(db: Session, customer_id: int):
+    db_license = get_license_by_customer(db, customer_id)
+    if db_license:
+        db_license.status = 'Revoked'
+        db_license.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(db_license)
+    return db_license
+
+def check_license_active(db: Session, customer_id: int) -> bool:
+    """Checks if the customer's license is currently active and not expired, and updates status if necessary."""
+    db_license = get_license_by_customer(db, customer_id)
+    now = datetime.now(timezone.utc)
+    
+    if not db_license:
+        return False 
+
+    is_active_status = db_license.status == 'Active' or db_license.status == 'Trial'
+    is_not_expired = db_license.expiry_date is None or db_license.expiry_date > now
+    
+    if (db_license.expiry_date and db_license.expiry_date <= now) and db_license.status != 'Expired':
+        db_license.status = 'Expired'
+        db.add(db_license)
+        db.commit()
+        return False 
+
+    return is_active_status and is_not_expired
+
+def log_superadmin_activity(db: Session, customer_id: int, activity_type: str, content: str):
+    """Logs activity related to SuperAdmin actions."""
+    print(f"[SUPERADMIN LOG] Customer {customer_id} ({activity_type}): {content}")
+    pass
+    
+def get_license_requests(db: Session) -> List[schemas.SuperAdminActivityLog]:
+    # Mocking retrieval of activity logs for the SuperAdmin UI
+    return []
