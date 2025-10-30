@@ -466,7 +466,7 @@ class WebRTCManager {
       } else if (action === "answer") {
         this.log("✅ Received answer from", from);
         
-        // --- 🔥 FIX: Reset _ignoreOffer when receiving a successful answer ---
+        // 🔥 FIX: Reset _ignoreOffer when receiving a successful answer 
         if (pc._ignoreOffer && pc.signalingState === "have-local-offer") {
             this.log(`🔥 Resetting _ignoreOffer flag for ${from} after receiving answer.`);
             pc._ignoreOffer = false;
