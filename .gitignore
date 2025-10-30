@@ -1,33 +1,33 @@
 # Node.js / React
 # --------------------------------
 # Dependencies
-/frontend/node_modules
-/frontend/package-lock.json
+/ui/node_modules
+/ui/package-lock.json
 
 # Build output
-/frontend/build
-/frontend/dist
+/ui/build
+/ui/dist
 
 # Logs
-/frontend/npm-debug.log*
-/frontend/yarn-debug.log*
-/frontend/yarn-error.log*
+/ui/npm-debug.log*
+/ui/yarn-debug.log*
+/ui/yarn-error.log*
 
 # Misc
-/frontend/.DS_Store
-/frontend/.env
-/frontend/.env.local
-/frontend/.env.development.local
-/frontend/.env.test.local
-/frontend/.env.production.local
+/ui/.DS_Store
+/ui/.env
+/ui/.env.local
+/ui/.env.development.local
+/ui/.env.test.local
+/ui/.env.production.local
 
 
 # Python / Server
 # --------------------------------
 # Virtual Environments
-/backend/__pycache__/
-/backend/venv
-/backend/.venv
+/server/__pycache__/
+/server/venv
+/server/.venv
 
 # Compiled Python files
 *.pyc
@@ -52,8 +52,8 @@ wheels/
 MANIFEST
 
 # Misc
-/backend/.env
-/backend/.DS_Store
+/server/.env
+/server/.DS_Store
 
 
 # IDE and Editor Files

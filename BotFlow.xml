@@ -1,0 +1,225 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36" version="28.2.8">
+  <diagram id="bot_detail_flow" name="Bot Detailed Meeting Steps">
+    <mxGraphModel dx="2056" dy="531" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" background="#FFFFFF" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="Start Bot Action: Bot Joins Meeting" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" parent="1" vertex="1">
+          <mxGeometry x="325" y="40" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="Bot Introduces Agenda and Today&#39;s Tasks (Fetched from Project Management App)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="325" y="120" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="Loop: Go through **Each Active Task** in the Project" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+          <mxGeometry x="325" y="200" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="Bot Opens Task &amp; Mentions **Owner**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+          <mxGeometry x="325" y="270" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="Task Status?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" parent="1" vertex="1">
+          <mxGeometry x="365" y="330" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="Ask: Is it **Unit Tested** / **Code Reviewed**? Is it Deployed to **Staging/Prod**?" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#0066cc;" parent="1" vertex="1">
+          <mxGeometry x="560" y="420" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8" value="Ask: What is the **Blocking Reason**? Who needs to **Unblock** this task?" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce5cd;strokeColor=#d67e05;" parent="1" vertex="1">
+          <mxGeometry x="325" y="420" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="Bot Captures All Updates and Stores in Meeting Project Management" style="process;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+          <mxGeometry x="325" y="520" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="11" value="Are there **More Active&amp;nbsp;&lt;div&gt;Tasks** to process?&lt;/div&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+          <mxGeometry x="335" y="580" width="180" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="12" value="Generate Meeting Summary, Action Items (Based on &#39;Stuck&#39; tasks), and Updated Statuses" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" vertex="1">
+          <mxGeometry x="325" y="700" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="Share Summary with Participants &amp; Configured Stakeholders (via Email/Chat App)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#0066cc;" parent="1" vertex="1">
+          <mxGeometry x="325" y="790" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="14" value="Update Project Management App with **Meeting Notes** and any **Status Changes**" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce5cd;strokeColor=#d67e05;" parent="1" vertex="1">
+          <mxGeometry x="325" y="880" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="15" value="Bot Leaves Meeting &amp; Stops Action" style="ellipse;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;" parent="1" vertex="1">
+          <mxGeometry x="325" y="990" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="16" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="2" target="3" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="17" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="3" target="4" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="19" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="4" target="5" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="18" value="Start Iteration" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="19" vertex="1" connectable="0">
+          <mxGeometry x="0.1086" relative="1" as="geometry">
+            <mxPoint x="2" y="-14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="20" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="5" target="6" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="22" value="" style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="6" target="7" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="485" y="380" as="sourcePoint" />
+            <mxPoint x="580" y="420" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="650" y="380" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="21" value="Done" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="22" vertex="1" connectable="0">
+          <mxGeometry x="0.0886" relative="1" as="geometry">
+            <mxPoint x="11" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="24" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="6" target="8" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="425" y="410" as="sourcePoint" />
+            <mxPoint x="425" y="420" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="23" value="Stuck/Blocked" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="24" vertex="1" connectable="0">
+          <mxGeometry x="0.0886" relative="1" as="geometry">
+            <mxPoint x="-11" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="26" value="" style="endArrow=classic;html=1;exitX=0;exitY=0.5;entryX=1;entryY=0;strokeColor=#000000;entryDx=0;entryDy=0;" parent="1" source="6" target="PmUFzPYdDegKmPEl-3Oy-55" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="365" y="380" as="sourcePoint" />
+            <mxPoint x="140" y="380" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="240" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="25" value="To Do/In Progress" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="26" vertex="1" connectable="0">
+          <mxGeometry x="0.0886" relative="1" as="geometry">
+            <mxPoint x="-11" y="-18" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="28" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="7" target="10" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="650" y="480" as="sourcePoint" />
+            <mxPoint x="425" y="520" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="650" y="500" />
+              <mxPoint x="425" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="27" value="Data Collected" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="28" vertex="1" connectable="0">
+          <mxGeometry x="0.1086" relative="1" as="geometry">
+            <mxPoint x="2" y="-14" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="29" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="8" target="10" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="425" y="480" as="sourcePoint" />
+            <mxPoint x="425" y="520" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="31" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="10" target="11" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="33" value="Next Task" style="endArrow=classic;html=1;exitX=0;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#000000;" parent="1" source="11" target="5" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="365" y="630" as="sourcePoint" />
+            <mxPoint x="295" y="630" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="290" y="630" />
+              <mxPoint x="290" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="32" value="Yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="33" vertex="1" connectable="0">
+          <mxGeometry x="0.0886" relative="1" as="geometry">
+            <mxPoint x="-11" y="-5" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="35" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="11" target="12" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="34" value="No" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="35" vertex="1" connectable="0">
+          <mxGeometry x="0.0886" relative="1" as="geometry">
+            <mxPoint x="-11" y="-5" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="36" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="12" target="13" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="37" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="13" target="14" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="38" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#000000;" parent="1" source="14" target="15" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-64" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-40" target="PmUFzPYdDegKmPEl-3Oy-41">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-40" value="Ask Owner: What is the **Reason** / **Blocker**?" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce5cd;strokeColor=#d67e05;" vertex="1" parent="1">
+          <mxGeometry x="-190" y="380" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-66" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-41" target="PmUFzPYdDegKmPEl-3Oy-65">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-41" value="Is the blocker/next step **Dependent** on another participant?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="-210" y="440" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-42" value="Bot Asks Dependent Participant for **Commitment/ETC**." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cce5ff;strokeColor=#0066cc;" vertex="1" parent="1">
+          <mxGeometry x="-210" y="610" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-43" value="Bot Adds **Update/Commitment Comment** to Task in Project App." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="30" y="620" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-48" value="Yes" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.451;entryY=0.055;strokeColor=#000000;exitDx=0;exitDy=0;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-41" target="PmUFzPYdDegKmPEl-3Oy-42">
+          <mxGeometry width="50" height="50" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-49" value="Commitment Received" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.408;entryY=0.993;strokeColor=#000000;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-42" target="PmUFzPYdDegKmPEl-3Oy-43">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1170" y="490" as="sourcePoint" />
+            <mxPoint x="1060" y="550" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="-70" y="750" />
+              <mxPoint x="80" y="700" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-58" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-55" target="PmUFzPYdDegKmPEl-3Oy-56">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-55" value="Is task moving&amp;nbsp;&lt;div&gt;out of estimated time&lt;/div&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="-20" y="250" width="140" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-61" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-56" target="PmUFzPYdDegKmPEl-3Oy-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-56" value="Bot asks if It will be completed on Estimated Time" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="130" y="365" width="155" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-60" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-59" target="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-63" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-59" target="PmUFzPYdDegKmPEl-3Oy-40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-59" value="User Says" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="140" y="450" width="70" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-62" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.309;entryY=0.078;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-55" target="PmUFzPYdDegKmPEl-3Oy-40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-67" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-65" target="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-65" value="Bot Raise the concern to the Intimation Group for Organization through Mail" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="50" y="520" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="PmUFzPYdDegKmPEl-3Oy-68" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.154;entryY=0.95;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="PmUFzPYdDegKmPEl-3Oy-43" target="10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
