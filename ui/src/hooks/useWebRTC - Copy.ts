@@ -108,7 +108,6 @@ class WebRTCManager {
   onSpeakerUpdate?: (speakers: Record<string, boolean>) => void;
   onLocalStream?: (s: MediaStream | null) => void;
 
-  // 🔥 FIX: Added more STUN servers for connection resilience
   iceConfig: RTCConfiguration = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
@@ -701,11 +700,15 @@ class WebRTCManager {
           if (pc._iceRestartTimer) window.clearTimeout(pc._iceRestartTimer);
           pc._iceRestartTimer = window.setTimeout(() => {
             try {
-              // 🔥 FIX: Removed internal state check to make ICE restart more aggressive
-              // if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+              // 🔥 FIX 2.0: Only attempt ICE restart if we are the final initiator (impolite)
+              const isInitiator = !this.isPolite(targetId);
+
+              if (isInitiator) {
                 this.log("?? Attempting ICE restart for", targetId);
                 try { (pc as any).restartIce?.(); } catch (err) { this.log('restartIce failed', err); }
-              // }
+              } else {
+                this.log(`🟡 Skipping ICE restart for polite peer ${targetId}. Waiting for remote offer.`);
+              }
             } catch (err) { this.log('ice restart debounce error', err); }
           }, 2500);
         } else {
@@ -720,10 +723,18 @@ class WebRTCManager {
         if (pc._negotiationTimer) {
           window.clearTimeout(pc._negotiationTimer);
         }
+        
+        // 🔥 FIX 3.0: Ensure immediate, safe cleanup on connection failure/closure.
         try { pc.close(); } catch { }
-        delete this.peers[targetId];
-        this.onRemoteStream?.(targetId, null);
-        this.onRemoteScreen?.(targetId, null);
+        
+        // Only delete the peer from the cache if it's the current active reference.
+        // This is crucial to allow a new connection attempt via the user_list signal.
+        if (this.peers[targetId] === pc) { 
+            delete this.peers[targetId];
+            this.onRemoteStream?.(targetId, null);
+            this.onRemoteScreen?.(targetId, null);
+            this.log(`🗑️ Removed failed peer ${targetId} from cache.`);
+        }
       }
     };
 
@@ -750,7 +761,7 @@ class WebRTCManager {
       if (e.track.kind === "audio") {
         let audioElem = document.getElementById(`audio-${targetId}`) as HTMLAudioElement;
         if (!audioElem) {
-          audioElem = document.createElement("audio");
+          audioEl = document.createElement("audio");
           audioElem.id = `audio-${targetId}`;
           audioElem.autoplay = true;
           audioElem.muted = false;
@@ -767,7 +778,7 @@ class WebRTCManager {
             this.log("[useWebRTC] Autoplay blocked, trying muted playback for", targetId, err);
             audioElem.muted = true;
             try {
-              await audioElem.play();
+              await audioEl.play();
               this.log("[useWebRTC] Muted playback OK for", targetId);
             } catch (err2) {
               this.log("[useWebRTC] Muted playback also failed for", targetId, err2);
@@ -1139,13 +1150,11 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       if (chatMessages.length > 0) return chatMessages;
 
       if (!token) {
-        // Fallback for testing or if authentication is managed elsewhere
         console.warn("Authentication token not found. Proceeding without token.");
-        // In a production app, you might throw or redirect here.
       }
       
       // Assuming API URL structure based on main.py endpoint
-      const API_BASE_URL = signalingBase?.replace('/ws', '/api') || import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+      const API_BASE_URL = signalingBase?.replace('/ws', '/api') || import.meta.env.VITE_API_URL || "https://synapt-server-ebcjejbjh6guhbau.canadacentral-01.azurewebsites.net/api";
       const historyUrl = `${API_BASE_URL.replace(/\/+$/, "")}/meetings/${room}/chat/history`;
       
       const response = await fetch(historyUrl, {

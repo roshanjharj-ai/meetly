@@ -723,10 +723,18 @@ class WebRTCManager {
         if (pc._negotiationTimer) {
           window.clearTimeout(pc._negotiationTimer);
         }
+        
+        // 🔥 FIX 3.0: Ensure immediate, safe cleanup on connection failure/closure.
         try { pc.close(); } catch { }
-        delete this.peers[targetId];
-        this.onRemoteStream?.(targetId, null);
-        this.onRemoteScreen?.(targetId, null);
+        
+        // Only delete the peer from the cache if it's the current active reference.
+        // This is crucial to allow a new connection attempt via the user_list signal.
+        if (this.peers[targetId] === pc) { 
+            delete this.peers[targetId];
+            this.onRemoteStream?.(targetId, null);
+            this.onRemoteScreen?.(targetId, null);
+            this.log(`🗑️ Removed failed peer ${targetId} from cache.`);
+        }
       }
     };
 
@@ -753,7 +761,7 @@ class WebRTCManager {
       if (e.track.kind === "audio") {
         let audioElem = document.getElementById(`audio-${targetId}`) as HTMLAudioElement;
         if (!audioElem) {
-          audioElem = document.createElement("audio");
+          audioEl = document.createElement("audio");
           audioElem.id = `audio-${targetId}`;
           audioElem.autoplay = true;
           audioElem.muted = false;
@@ -770,7 +778,7 @@ class WebRTCManager {
             this.log("[useWebRTC] Autoplay blocked, trying muted playback for", targetId, err);
             audioElem.muted = true;
             try {
-              await audioElem.play();
+              await audioEl.play();
               this.log("[useWebRTC] Muted playback OK for", targetId);
             } catch (err2) {
               this.log("[useWebRTC] Muted playback also failed for", targetId, err2);
@@ -1142,9 +1150,7 @@ export function useWebRTC(room: string, userId: string, signalingBase?: string) 
       if (chatMessages.length > 0) return chatMessages;
 
       if (!token) {
-        // Fallback for testing or if authentication is managed elsewhere
         console.warn("Authentication token not found. Proceeding without token.");
-        // In a production app, you might throw or redirect here.
       }
       
       // Assuming API URL structure based on main.py endpoint
