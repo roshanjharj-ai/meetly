@@ -1,0 +1,33 @@
+name: Deploy Python Backend to Azure App Service
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'server/**' # Only run when backend code changes
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_C9807E67A4214F409B66151CB89AE80C }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_EB32386FC95940A699C53A6E22D318AE }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_8B63211FB27F46B18A5A90A7B1B1A4BF }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'meetly-server'
+          package: ./server

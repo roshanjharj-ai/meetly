@@ -1,0 +1,38 @@
+# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
+# More GitHub Actions for Azure: https://github.com/Azure/actions
+# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
+
+name: Build and deploy Python app to Azure Web App - synapt-server
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'server/**' # Only run when backend code changes
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_67E973E2842D43E889C855699931FB67 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B65E235E564A4749A0586B467F1C29AD }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_8B228BCF49784C4DAA7825EF09B063D9 }}
+
+      - name: 'Deploy to Azure Web App'
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'synapt-server'
+          package: ./server
+          
