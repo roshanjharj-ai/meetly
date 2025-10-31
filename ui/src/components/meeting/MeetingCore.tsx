@@ -32,19 +32,19 @@ interface MeetingCoreProps {
 
 const SidebarContent = React.memo(
   (props: any) => {
-    const { 
-      isMobile, 
-      activeSidebarTab, 
-      setActiveSidebarTab, 
-      setIsSidebarOpen, 
-      userList, 
-      botSpeaker, 
-      sharingBy, 
-      chatMessages, 
-      sendChatMessage, 
-      localUserId, 
+    const {
+      isMobile,
+      activeSidebarTab,
+      setActiveSidebarTab,
+      setIsSidebarOpen,
+      userList,
+      botSpeaker,
+      sharingBy,
+      chatMessages,
+      sendChatMessage,
+      localUserId,
       // NEW: Props for enhanced ChatPanel
-      roomId, 
+      roomId,
       fetchChatHistory,
       users // Raw user IDs list (strings)
     } = props;
@@ -107,6 +107,12 @@ const SidebarContent = React.memo(
   }
 );
 
+declare global {
+  interface Window {
+    meetSocket?: WebSocket;
+  }
+}
+
 const MeetingCore: React.FC<MeetingCoreProps> = ({
   room,
   userName,
@@ -142,7 +148,7 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     chatMessages,
     sendChatMessage,
     // NEW: Destructure fetchChatHistory
-    fetchChatHistory, 
+    fetchChatHistory,
     botSpeaker,
     peerStatus,
     sharedContent,
@@ -173,6 +179,43 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
     };
   }, [connect, disconnect, initialAudioEnabled, initialVideoEnabled]);
 
+  useEffect(() => {
+    const audioEl = document.createElement("audio");
+    audioEl.autoplay = true;
+    (audioEl as any).playsInline = true;
+    document.body.appendChild(audioEl);
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "bot_audio" && msg.data) {
+          const fmt = (msg.format || "mp3").toLowerCase();
+          const mime = fmt === "wav" ? "audio/wav" : "audio/mpeg";
+          const src = `data:${mime};base64,${msg.data}`;
+          audioEl.src = src;
+          const playPromise = audioEl.play();
+          if (playPromise) {
+            playPromise.catch((err) => console.warn("Audio play blocked:", err));
+          }
+        }
+      } catch (err) {
+        console.error("bot_audio parse error:", err);
+      }
+    };
+
+    // Attach WebSocket handler
+    if (window.meetSocket) {
+      window.meetSocket.addEventListener("message", handleMessage);
+    }
+
+    return () => {
+      if (window.meetSocket) {
+        window.meetSocket.removeEventListener("message", handleMessage);
+      }
+    };
+  }, []);
+
+
   const stateRef = useRef({ isMuted, isCameraOff, isRecording, isScreenSharing });
 
   useEffect(() => {
@@ -187,8 +230,8 @@ const MeetingCore: React.FC<MeetingCoreProps> = ({
       selectVideoDevice(prefDevice.videoDeviceId);
     }
   }, [prefDevice, selectAudioDevice, selectVideoDevice]);
-  
-    // Handle fullscreen changes
+
+  // Handle fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullScreen(!!document.fullscreenElement);
