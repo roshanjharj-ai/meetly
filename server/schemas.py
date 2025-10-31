@@ -2,6 +2,7 @@
 from pydantic import BaseModel, EmailStr,Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+import models
 
 
 class ValidateJoinRequest(BaseModel):
@@ -298,5 +299,13 @@ class LLMUsage(BaseModel):
     avg_cost_per_meeting: float
     cost_history: List[LLMCostEntry]
     
+    class Config:
+        from_attributes = True
+        
+class MeetingStateUpdate(BaseModel):
+    room_id: str
+    state: models.MeetingStatusEnum  # Enum typing
+    updated_at: datetime
+
     class Config:
         from_attributes = True

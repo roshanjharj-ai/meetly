@@ -627,3 +627,33 @@ def log_superadmin_activity(db: Session, customer_id: int, activity_type: str, c
 def get_license_requests(db: Session) -> List[schemas.SuperAdminActivityLog]:
     # Mocking retrieval of activity logs for the SuperAdmin UI
     return []
+
+def update_meeting_state(db: Session, state_update: "schemas.MeetingStateUpdate"):
+    """
+    Creates or updates an entry in the MeetingState table.
+    Used by socket_main.py when a meeting starts or ends.
+    """
+    db_state = db.query(models.MeetingState).filter(
+        models.MeetingState.room_id == state_update.room_id
+    ).first()
+
+    if db_state:
+        # Update existing fields only if provided
+        if hasattr(state_update, "state") and state_update.state is not None:
+            db_state.state = state_update.state
+        if hasattr(state_update, "updated_at") and state_update.updated_at is not None:
+            db_state.updated_at = state_update.updated_at
+    else:
+        # Create new meeting state
+        db_state = models.MeetingState(
+            room_id=state_update.room_id,
+            state=state_update.state,
+            updated_at=state_update.updated_at
+            if state_update.updated_at
+            else datetime.now(timezone.utc),
+        )
+        db.add(db_state)
+
+    db.commit()
+    db.refresh(db_state)
+    return db_state

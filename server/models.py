@@ -2,6 +2,7 @@
 from sqlalchemy import BigInteger, Column, Integer, String, Text, DateTime, ForeignKey, Table, Boolean, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base # Assuming database.py provides the Base class
+from enum import Enum
 
 meeting_participants = Table('meeting_participants', Base.metadata,
     Column('meeting_id', Integer, ForeignKey('meetings.id', ondelete="CASCADE"), primary_key=True),
@@ -172,3 +173,9 @@ class BotActivity(Base):
     activity_type = Column(String(50), nullable=False)
     content = Column(Text, nullable=False)
     task_status = Column(String(50), nullable=True)
+    
+
+class MeetingStatusEnum(str, Enum):
+    ACTIVE = "ACTIVE"
+    ENDED = "ENDED"
+    SCHEDULED = "SCHEDULED"
