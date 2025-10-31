@@ -1,6 +1,6 @@
 /* src/hooks/useWebRTC.ts */
 /* eslint-disable no-console */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** ---------------------------------------------------------
  * Types (staying compatible with your existing app)
